@@ -1,0 +1,44 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "opentainer",
+  "version": "0.0.1",
+  "identifier": "com.opentainer.app",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev:vite",
+    "beforeBuildCommand": "npm run build:vite",
+    "removeUnusedCommands": true
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Opentainer",
+        "width": 1200,
+        "height": 800,
+        "resizable": true,
+        "fullscreen": false,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' asset: https://asset.localhost data:; style-src 'self' 'unsafe-inline';"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "shortDescription": "Opentainer",
+    "publisher": "Zahid Cakici",
+    "icon": [
+      "icons/icon-192.png",
+      "icons/icon-512.png",
+      "icons/icon_256x256x32.png",
+      "icons/icon_512x512x32.png",
+      "icons/icon_1024x1024x32.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

@@ -1,0 +1,78 @@
+:root {
+  /* Typography */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "Menlo", "Monaco", "Consolas", "Courier New", monospace;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+
+  /* Animation */
+  --transition-fast: 150ms ease;
+
+  /* Status Colors (Same for both usually, or slightly adjusted) */
+  --status-running: #10b981;
+  /* Emerald 500 */
+  --status-stopped: #71717a;
+  /* Zinc 500 */
+  --status-error: #ef4444;
+  /* Red 500 */
+  --status-warn: #eab308;
+  /* Yellow 500 */
+}
+
+/* Default / Dark Theme */
+:root,
+[data-theme='dark'] {
+  --bg-app: #0f0f10;
+  --bg-panel: #18181b;
+  --bg-hover: #27272a;
+
+  --border-subtle: #27272a;
+  --border-active: #3f3f46;
+
+  --text-primary: #f4f4f5;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+
+  --accent-primary: #ffffff;
+  --accent-secondary: #f4f4f5;
+}
+
+/* Light Theme */
+[data-theme='light'] {
+  --bg-app: #ffffff;
+  --bg-panel: #f4f4f5;
+  --bg-hover: #e4e4e7;
+
+  --border-subtle: #e4e4e7;
+  --border-active: #d4d4d8;
+
+  --text-primary: #09090b;
+  --text-secondary: #52525b;
+  --text-muted: #71717a;
+
+  --accent-primary: #18181b;
+  --accent-secondary: #27272a;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    --bg-app: #ffffff;
+    --bg-panel: #f4f4f5;
+    --bg-hover: #e4e4e7;
+
+    --border-subtle: #e4e4e7;
+    --border-active: #d4d4d8;
+
+    --text-primary: #09090b;
+    --text-secondary: #52525b;
+    --text-muted: #71717a;
+
+    --accent-primary: #18181b;
+    --accent-secondary: #27272a;
+  }
+}

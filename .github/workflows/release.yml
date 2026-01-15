@@ -1,0 +1,105 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  publish-tauri:
+    name: Release (${{ matrix.platform }})
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: '--target aarch64-apple-darwin'
+          - platform: macos-latest
+            args: '--target x86_64-apple-darwin'
+          - platform: ubuntu-22.04
+            args: ''
+          - platform: windows-latest
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Update version in package.json
+        run: npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version --allow-same-version
+
+      - name: Update version in tauri.conf.json
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            sed -i 's/"version": "[^"]*"/"version": "${{ steps.version.outputs.VERSION }}"/' src-tauri/tauri.conf.json
+          else
+            sed -i '' 's/"version": "[^"]*"/"version": "${{ steps.version.outputs.VERSION }}"/' src-tauri/tauri.conf.json 2>/dev/null || sed -i 's/"version": "[^"]*"/"version": "${{ steps.version.outputs.VERSION }}"/' src-tauri/tauri.conf.json
+          fi
+        shell: bash
+
+      - name: Update version in Cargo.toml
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            sed -i 's/^version = "[^"]*"/version = "${{ steps.version.outputs.VERSION }}"/' src-tauri/Cargo.toml
+          else
+            sed -i '' 's/^version = "[^"]*"/version = "${{ steps.version.outputs.VERSION }}"/' src-tauri/Cargo.toml 2>/dev/null || sed -i 's/^version = "[^"]*"/version = "${{ steps.version.outputs.VERSION }}"/' src-tauri/Cargo.toml
+          fi
+        shell: bash
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build and Release
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: app-v__VERSION__
+          releaseName: 'Opentainer v__VERSION__'
+          releaseBody: |
+            ## What's New
+            
+            See the assets to download this version and install.
+            
+            ## Downloads
+            
+            | Platform | File |
+            |----------|------|
+            | macOS (Apple Silicon) | `opentainer_*_aarch64.dmg` |
+            | macOS (Intel) | `opentainer_*_x64.dmg` |
+            | Windows | `opentainer_*_x64-setup.exe` or `.msi` |
+            | Linux | `opentainer_*_amd64.AppImage` or `.deb` |
+            
+            ## Installation
+            
+            - **macOS**: Download the `.dmg`, open it, and drag Opentainer to Applications
+            - **Windows**: Download and run the `.exe` or `.msi` installer
+            - **Linux**: Download `.AppImage` (make executable) or `.deb` (install with dpkg)
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}

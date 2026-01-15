@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint-and-test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install system dependencies (Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      - name: Type Check (TypeScript)
+        run: npm run type-check
+
+      - name: Test (Vitest)
+        run: npm run test -- --run
+
+      - name: Security Audit (npm)
+        run: npm audit
+
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@cargo-audit
+
+      - name: Security Audit (Rust)
+        run: cargo audit
+        working-directory: src-tauri
+
+      - name: Rust Format Check
+        run: cargo fmt -- --check
+        working-directory: src-tauri
+
+      - name: Rust Clippy
+        run: cargo clippy -- -D warnings
+        working-directory: src-tauri
+
+      - name: Rust Check
+        run: cargo check
+        working-directory: src-tauri
