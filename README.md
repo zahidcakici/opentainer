@@ -30,9 +30,13 @@
 
 ## 📸 Screenshots
 
-<!-- Add your screenshots to the assets/ folder and reference them here -->
-<!-- Example: ![Dashboard](assets/screenshot-dashboard.png) -->
-*Screenshots coming soon*
+<div align="center">
+
+![Containers](assets/containers.png)
+![Containers Dark](assets/containers-dark.png)
+![Logs](assets/logs.png)
+
+</div>
 
 ## 📥 Installation
 
