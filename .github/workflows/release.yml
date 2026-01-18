@@ -75,7 +75,7 @@ jobs:
         run: npm ci
 
       - name: Build and Release
-        uses: tauri-apps/tauri-action@8dc56df183cc5aa67c880b1931659f6bc9af997a
+        uses: tauri-apps/tauri-action@a5e8d02eebede9840d3c77437e8624c8f2836732
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
