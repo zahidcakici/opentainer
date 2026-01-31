@@ -19,12 +19,13 @@
 ## ✨ Features
 
 - **⚡ Ultra-Lightweight** - Tiny ~7MB binary with minimal CPU/RAM footprint
+- **🐳 Standalone Docker Engine** - Can run as a complete Docker Desktop alternative using Colima (on macOS)
 - **📦 Container Management** - Start, stop, restart, and remove containers with ease
 - **🖥️ Interactive Terminal** - Built-in shell access to running containers
 - **📜 Live Logs** - Real-time log streaming with search functionality
 - **🖼️ Image Management** - Pull, list, and remove Docker images
-- **� Volume & Network Management** - Full control over Docker resources
-- **�📊 Resource Monitoring** - Live CPU and memory usage statistics
+- **💾 Volume & Network Management** - Full control over Docker resources
+- **📊 Resource Monitoring** - Live CPU and memory usage statistics
 - **🎨 Modern UI** - Beautiful, responsive interface with smooth animations
 - **🔋 Battery Efficient** - Doesn't drain your laptop's battery like heavy managers
 
@@ -51,9 +52,23 @@ Download the latest release for your platform from the [Releases](https://github
 | Linux | `.AppImage` / `.deb` |
 
 ### Requirements
-
-- **Docker** must be installed and running on your system
-- macOS 10.15+, Windows 10+, or Linux (Ubuntu 20.04+)
+ 
+ - **Docker** must be installed and running on your system, OR:
+ - **Colima** (macOS) - Opentainer can automatically manage the Colima runtime for you.
+ - macOS 10.15+, Windows 10+, or Linux (Ubuntu 20.04+)
+ 
+ ### 🐳 Standalone Mode (macOS)
+ 
+ Opentainer can replace Docker Desktop entirely on macOS. It automatically detects your environment:
+ 
+ 1. **Existing Docker**: If you have Docker Desktop, OrbStack, or Podman running, Opentainer connects to it automatically.
+ 2. **Standalone**: If no Docker is running, Opentainer checks for **Colima**. If installed, it will automatically start/stop the Docker runtime for you, using minimal resources.
+ 
+ To use Standalone mode:
+ ```bash
+ brew install colima docker
+ ```
+ Then just launch Opentainer! It will handle the rest.
 
 ## 🛠️ Development
 

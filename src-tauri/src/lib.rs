@@ -1,3 +1,5 @@
+mod docker_lifecycle;
+
 use bollard::exec::{CreateExecOptions, StartExecResults};
 use bollard::models::ContainerStatsResponse;
 use bollard::query_parameters::{
@@ -13,6 +15,28 @@ use std::sync::Mutex;
 use tauri::{Emitter, State};
 use tokio::sync::mpsc;
 use tokio::task::AbortHandle;
+
+/// Connect to Docker, trying Colima's socket on macOS if default fails
+fn get_docker() -> Result<Docker, bollard::errors::Error> {
+    // First try the default connection
+    if let Ok(docker) = Docker::connect_with_local_defaults() {
+        return Ok(docker);
+    }
+
+    // On macOS, try Colima's socket path
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(home) = std::env::var("HOME") {
+            let colima_socket = format!("{home}/.colima/default/docker.sock");
+            if std::path::Path::new(&colima_socket).exists() {
+                return Docker::connect_with_socket(&colima_socket, 120, bollard::API_DEFAULT_VERSION);
+            }
+        }
+    }
+
+    // Fall back to default error
+    Docker::connect_with_local_defaults()
+}
 
 struct LogState(Mutex<HashMap<String, tauri::async_runtime::JoinHandle<()>>>);
 
@@ -38,7 +62,7 @@ fn start_logs(
     app_handle: tauri::AppHandle,
     state: State<'_, LogState>,
 ) -> CommandResponse<()> {
-    let docker = match Docker::connect_with_local_defaults() {
+    let docker = match get_docker() {
         Ok(d) => d,
         Err(e) => {
             return CommandResponse {
@@ -100,7 +124,7 @@ fn start_exec(
     app_handle: tauri::AppHandle,
     state: State<'_, ExecState>,
 ) -> CommandResponse<()> {
-    let docker = match Docker::connect_with_local_defaults() {
+    let docker = match get_docker() {
         Ok(d) => d,
         Err(e) => {
             return CommandResponse {
@@ -244,7 +268,7 @@ struct ContainerStatsResult {
 async fn get_batch_stats(
     ids: Vec<String>,
 ) -> Result<CommandResponse<Vec<ContainerStatsResult>>, String> {
-    let docker = match Docker::connect_with_local_defaults() {
+    let docker = match get_docker() {
         Ok(d) => d,
         Err(e) => {
             return Ok(CommandResponse {
@@ -305,7 +329,7 @@ async fn get_batch_stats(
 #[tauri::command]
 async fn list_containers() -> Result<CommandResponse<Vec<bollard::models::ContainerSummary>>, String>
 {
-    let docker = match Docker::connect_with_local_defaults() {
+    let docker = match get_docker() {
         Ok(d) => d,
         Err(e) => {
             return Ok(CommandResponse {
@@ -337,7 +361,7 @@ async fn list_containers() -> Result<CommandResponse<Vec<bollard::models::Contai
 
 #[tauri::command]
 async fn container_action(id: String, action: String) -> Result<CommandResponse<()>, String> {
-    let docker = match Docker::connect_with_local_defaults() {
+    let docker = match get_docker() {
         Ok(d) => d,
         Err(e) => {
             return Ok(CommandResponse {
@@ -378,7 +402,7 @@ async fn container_action(id: String, action: String) -> Result<CommandResponse<
 
 #[tauri::command]
 async fn list_images() -> Result<CommandResponse<Vec<bollard::models::ImageSummary>>, String> {
-    let docker = match Docker::connect_with_local_defaults() {
+    let docker = match get_docker() {
         Ok(d) => d,
         Err(e) => {
             return Ok(CommandResponse {
@@ -405,7 +429,7 @@ async fn list_images() -> Result<CommandResponse<Vec<bollard::models::ImageSumma
 
 #[tauri::command]
 async fn list_volumes() -> Result<CommandResponse<Vec<bollard::models::Volume>>, String> {
-    let docker = match Docker::connect_with_local_defaults() {
+    let docker = match get_docker() {
         Ok(d) => d,
         Err(e) => {
             return Ok(CommandResponse {
@@ -432,7 +456,7 @@ async fn list_volumes() -> Result<CommandResponse<Vec<bollard::models::Volume>>,
 
 #[tauri::command]
 async fn list_networks() -> Result<CommandResponse<Vec<bollard::models::Network>>, String> {
-    let docker = match Docker::connect_with_local_defaults() {
+    let docker = match get_docker() {
         Ok(d) => d,
         Err(e) => {
             return Ok(CommandResponse {
@@ -459,7 +483,7 @@ async fn list_networks() -> Result<CommandResponse<Vec<bollard::models::Network>
 
 #[tauri::command]
 async fn remove_image(id: String) -> Result<CommandResponse<()>, String> {
-    let docker = match Docker::connect_with_local_defaults() {
+    let docker = match get_docker() {
         Ok(d) => d,
         Err(e) => {
             return Ok(CommandResponse {
@@ -489,7 +513,7 @@ async fn remove_image(id: String) -> Result<CommandResponse<()>, String> {
 
 #[tauri::command]
 async fn remove_volume(name: String) -> Result<CommandResponse<()>, String> {
-    let docker = match Docker::connect_with_local_defaults() {
+    let docker = match get_docker() {
         Ok(d) => d,
         Err(e) => {
             return Ok(CommandResponse {
@@ -524,7 +548,7 @@ async fn pull_image(
     session_id: String,
     state: State<'_, PullState>,
 ) -> Result<CommandResponse<()>, String> {
-    let docker = match Docker::connect_with_local_defaults() {
+    let docker = match get_docker() {
         Ok(d) => d,
         Err(e) => {
             return Ok(CommandResponse {
@@ -597,6 +621,105 @@ fn get_app_version(app_handle: tauri::AppHandle) -> String {
     app_handle.package_info().version.to_string()
 }
 
+// Docker lifecycle commands
+#[tauri::command]
+fn check_colima_installed() -> CommandResponse<bool> {
+    let installed = docker_lifecycle::check_colima_installed();
+    CommandResponse {
+        success: true,
+        data: Some(installed),
+        error: None,
+    }
+}
+
+#[tauri::command]
+async fn check_docker_running() -> Result<CommandResponse<bool>, String> {
+    let running = docker_lifecycle::check_docker_running().await;
+    Ok(CommandResponse {
+        success: true,
+        data: Some(running),
+        error: None,
+    })
+}
+
+#[tauri::command]
+async fn get_docker_status() -> Result<CommandResponse<docker_lifecycle::DockerStatus>, String> {
+    let status = docker_lifecycle::get_docker_status().await;
+    Ok(CommandResponse {
+        success: true,
+        data: Some(status),
+        error: None,
+    })
+}
+
+#[tauri::command]
+async fn start_docker() -> Result<CommandResponse<()>, String> {
+    match docker_lifecycle::start_docker_runtime().await {
+        Ok(_) => Ok(CommandResponse {
+            success: true,
+            data: None,
+            error: None,
+        }),
+        Err(e) => Ok(CommandResponse {
+            success: false,
+            data: None,
+            error: Some(e),
+        }),
+    }
+}
+
+#[tauri::command]
+async fn stop_docker() -> Result<CommandResponse<()>, String> {
+    match docker_lifecycle::stop_docker_runtime().await {
+        Ok(_) => Ok(CommandResponse {
+            success: true,
+            data: None,
+            error: None,
+        }),
+        Err(e) => Ok(CommandResponse {
+            success: false,
+            data: None,
+            error: Some(e),
+        }),
+    }
+}
+
+#[tauri::command]
+async fn wait_for_docker(timeout_secs: u64) -> Result<CommandResponse<()>, String> {
+    match docker_lifecycle::wait_for_docker_ready(timeout_secs).await {
+        Ok(_) => Ok(CommandResponse {
+            success: true,
+            data: None,
+            error: None,
+        }),
+        Err(e) => Ok(CommandResponse {
+            success: false,
+            data: None,
+            error: Some(e),
+        }),
+    }
+}
+
+#[tauri::command]
+fn get_install_instructions() -> CommandResponse<String> {
+    let instructions = docker_lifecycle::get_install_instructions();
+    CommandResponse {
+        success: true,
+        data: Some(instructions),
+        error: None,
+    }
+}
+
+#[tauri::command]
+fn did_we_start_docker() -> CommandResponse<bool> {
+    let we_started = docker_lifecycle::did_we_start_docker();
+    CommandResponse {
+        success: true,
+        data: Some(we_started),
+        error: None,
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -630,8 +753,84 @@ pub fn run() {
             exec_input,
             stop_exec,
             pull_image,
-            stop_pull
+            stop_pull,
+            // Docker lifecycle commands
+            check_colima_installed,
+            check_docker_running,
+            get_docker_status,
+            start_docker,
+            stop_docker,
+            wait_for_docker,
+            get_install_instructions,
+            did_we_start_docker
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .on_window_event(|window, event| {
+            // Handle window close request (red X button) - stop Docker if we started it
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                
+                if docker_lifecycle::did_we_start_docker() {
+                    // Prevent window from closing immediately
+                    api.prevent_close();
+                    
+                    // Emit event to frontend to show stopping UI
+                    let _ = window.emit("docker-stopping", ());
+                    
+                    log::info!("Opentainer started Colima, stopping it on exit...");
+                    
+                    // Clone window handle for the closure
+                    let win = window.clone();
+                    
+                    // Spawn thread to stop Docker then close
+                    std::thread::spawn(move || {
+                        let rt = tokio::runtime::Runtime::new().unwrap();
+                        let _ = rt.block_on(docker_lifecycle::stop_docker_runtime());
+                        log::info!("Colima stopped.");
+                        // Now actually close the window
+                        let _ = win.close();
+                    });
+                }
+            }
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            // Handle Cmd+Q (macOS app menu quit)
+            if let tauri::RunEvent::ExitRequested { ref api, .. } = event {
+                // log
+                log::info!("Opentainer received Cmd+Q, checking if we started Docker...");
+                
+                if docker_lifecycle::did_we_start_docker() {
+                    // Prevent immediate exit
+                    api.prevent_exit();
+                    
+                    // Emit event to frontend to show stopping UI
+                    let _ = app_handle.emit("docker-stopping", ());
+                    
+                    log::info!("Opentainer started Colima (Cmd+Q), stopping it on exit...");
+                    
+                    let handle = app_handle.clone();
+                    
+                    std::thread::spawn(move || {
+                        let rt = tokio::runtime::Runtime::new().unwrap();
+                        let _ = rt.block_on(docker_lifecycle::stop_docker_runtime());
+                        log::info!("Colima stopped.");
+                        handle.exit(0);
+                    });
+                }
+            }
+            
+            // Log when app actually exits
+            if let tauri::RunEvent::Exit = event {
+                log::info!("Opentainer RunEvent::Exit fired");
+
+                // Reliable fallback: If Docker is still running check failed or skipped (e.g. forced exit),
+                // we MUST stop it here, blocking the main thread to ensure completion.
+                if docker_lifecycle::did_we_start_docker() {
+                    log::info!("Docker still marked as running in Exit event. Executing blocking stop...");
+                    let rt = tokio::runtime::Runtime::new().unwrap();
+                    let _ = rt.block_on(docker_lifecycle::stop_docker_runtime());
+                    log::info!("Colima stopped (in Exit fallback).");
+                }
+            }
+        });
 }

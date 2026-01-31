@@ -2,6 +2,13 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 // Define the interface for the API
+export interface DockerStatusResponse {
+    running: boolean;
+    colima_installed: boolean;
+    we_started: boolean;
+    error?: string;
+}
+
 export interface AppApi {
     listContainers: () => Promise<{ success: boolean; data?: any[]; error?: string }>;
     containerAction: (id: string, action: string) => Promise<{ success: boolean; error?: string }>;
@@ -26,6 +33,13 @@ export interface AppApi {
     getBatchStats: (ids: string[]) => Promise<{ success: boolean; data?: { id: string; success: boolean; data?: any; error?: string }[]; error?: string }>;
     openExternal: (url: string) => Promise<{ success: boolean; error?: string }>;
     getAppVersion: () => Promise<string>;
+    // Docker lifecycle methods
+    checkColimaInstalled: () => Promise<{ success: boolean; data?: boolean; error?: string }>;
+    checkDockerRunning: () => Promise<{ success: boolean; data?: boolean; error?: string }>;
+    getDockerStatus: () => Promise<{ success: boolean; data?: DockerStatusResponse; error?: string }>;
+    startDocker: () => Promise<{ success: boolean; error?: string }>;
+    waitForDocker: (timeoutSecs: number) => Promise<{ success: boolean; error?: string }>;
+    getInstallInstructions: () => Promise<{ success: boolean; data?: string; error?: string }>;
 }
 
 export const api: AppApi = {
@@ -156,4 +170,11 @@ export const api: AppApi = {
     },
     removeVolume: async (name: string) => invoke("remove_volume", { name }),
     getContainerStats: async () => ({ success: false, error: "Use getBatchStats instead" }),
+    // Docker lifecycle methods
+    checkColimaInstalled: async () => invoke("check_colima_installed"),
+    checkDockerRunning: async () => invoke("check_docker_running"),
+    getDockerStatus: async () => invoke("get_docker_status"),
+    startDocker: async () => invoke("start_docker"),
+    waitForDocker: async (timeoutSecs: number) => invoke("wait_for_docker", { timeoutSecs }),
+    getInstallInstructions: async () => invoke("get_install_instructions"),
 };
