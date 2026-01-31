@@ -11,7 +11,7 @@ static WE_STARTED_DOCKER: AtomicBool = AtomicBool::new(false);
 static START_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 
 /// Docker lifecycle management for Opentainer
-/// 
+///
 /// Strategy:
 /// 1. Check if Docker is RUNNING first (supports any provider: Orbstack, Podman, Docker Desktop)
 /// 2. If running, use it without managing it
@@ -39,9 +39,13 @@ pub async fn check_docker_running() -> bool {
     // On macOS, also try Colima's socket path
     #[cfg(target_os = "macos")]
     {
-        if let Some(home) = std::env::var("HOME").ok() {
+        if let Ok(home) = std::env::var("HOME") {
             let colima_socket = format!("unix://{home}/.colima/default/docker.sock");
-            if let Ok(docker) = bollard::Docker::connect_with_socket(&colima_socket, 120, bollard::API_DEFAULT_VERSION) {
+            if let Ok(docker) = bollard::Docker::connect_with_socket(
+                &colima_socket,
+                120,
+                bollard::API_DEFAULT_VERSION,
+            ) {
                 if docker.ping().await.is_ok() {
                     return true;
                 }
@@ -85,7 +89,10 @@ pub fn check_colima_installed() -> bool {
 /// Use wait_for_docker_ready() to wait for Docker to be responsive.
 pub async fn start_docker_runtime() -> Result<(), String> {
     // Prevent concurrent starts
-    if START_IN_PROGRESS.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+    if START_IN_PROGRESS
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
         log::info!("Start already in progress, skipping duplicate call");
         return Ok(());
     }
@@ -99,10 +106,8 @@ pub async fn start_docker_runtime() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         // First check if already running
-        let status_output = Command::new("colima")
-            .arg("status")
-            .output();
-        
+        let status_output = Command::new("colima").arg("status").output();
+
         if let Ok(output) = status_output {
             if output.status.success() {
                 // Already running - someone else started it
@@ -123,9 +128,12 @@ pub async fn start_docker_runtime() -> Result<(), String> {
 
         // Mark that we started Docker
         WE_STARTED_DOCKER.store(true, Ordering::SeqCst);
-        
-        log::info!("Colima start spawned with PID: {:?}, WE_STARTED_DOCKER=true", child.id());
-        
+
+        log::info!(
+            "Colima start spawned with PID: {:?}, WE_STARTED_DOCKER=true",
+            child.id()
+        );
+
         START_IN_PROGRESS.store(false, Ordering::SeqCst);
         Ok(())
     }

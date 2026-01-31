@@ -29,7 +29,11 @@ fn get_docker() -> Result<Docker, bollard::errors::Error> {
         if let Ok(home) = std::env::var("HOME") {
             let colima_socket = format!("{home}/.colima/default/docker.sock");
             if std::path::Path::new(&colima_socket).exists() {
-                return Docker::connect_with_socket(&colima_socket, 120, bollard::API_DEFAULT_VERSION);
+                return Docker::connect_with_socket(
+                    &colima_socket,
+                    120,
+                    bollard::API_DEFAULT_VERSION,
+                );
             }
         }
     }
@@ -767,19 +771,18 @@ pub fn run() {
         .on_window_event(|window, event| {
             // Handle window close request (red X button) - stop Docker if we started it
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                
                 if docker_lifecycle::did_we_start_docker() {
                     // Prevent window from closing immediately
                     api.prevent_close();
-                    
+
                     // Emit event to frontend to show stopping UI
                     let _ = window.emit("docker-stopping", ());
-                    
+
                     log::info!("Opentainer started Colima, stopping it on exit...");
-                    
+
                     // Clone window handle for the closure
                     let win = window.clone();
-                    
+
                     // Spawn thread to stop Docker then close
                     std::thread::spawn(move || {
                         let rt = tokio::runtime::Runtime::new().unwrap();
@@ -798,18 +801,18 @@ pub fn run() {
             if let tauri::RunEvent::ExitRequested { ref api, .. } = event {
                 // log
                 log::info!("Opentainer received Cmd+Q, checking if we started Docker...");
-                
+
                 if docker_lifecycle::did_we_start_docker() {
                     // Prevent immediate exit
                     api.prevent_exit();
-                    
+
                     // Emit event to frontend to show stopping UI
                     let _ = app_handle.emit("docker-stopping", ());
-                    
+
                     log::info!("Opentainer started Colima (Cmd+Q), stopping it on exit...");
-                    
+
                     let handle = app_handle.clone();
-                    
+
                     std::thread::spawn(move || {
                         let rt = tokio::runtime::Runtime::new().unwrap();
                         let _ = rt.block_on(docker_lifecycle::stop_docker_runtime());
@@ -818,7 +821,7 @@ pub fn run() {
                     });
                 }
             }
-            
+
             // Log when app actually exits
             if let tauri::RunEvent::Exit = event {
                 log::info!("Opentainer RunEvent::Exit fired");
@@ -826,7 +829,9 @@ pub fn run() {
                 // Reliable fallback: If Docker is still running check failed or skipped (e.g. forced exit),
                 // we MUST stop it here, blocking the main thread to ensure completion.
                 if docker_lifecycle::did_we_start_docker() {
-                    log::info!("Docker still marked as running in Exit event. Executing blocking stop...");
+                    log::info!(
+                        "Docker still marked as running in Exit event. Executing blocking stop..."
+                    );
                     let rt = tokio::runtime::Runtime::new().unwrap();
                     let _ = rt.block_on(docker_lifecycle::stop_docker_runtime());
                     log::info!("Colima stopped (in Exit fallback).");
