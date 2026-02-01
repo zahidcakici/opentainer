@@ -49,7 +49,7 @@ jobs:
         run: npm ci
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@8dc56df183cc5aa67c880b1931659f6bc9af997a
+        uses: tauri-apps/tauri-action@f31fac17d09882736b3aee2fa01630731e631aad
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
