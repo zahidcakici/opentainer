@@ -24,7 +24,7 @@
     "@xterm/xterm": "^6.0.0",
     "byte-size": "^9.0.1",
     "date-fns": "^4.1.0",
-    "framer-motion": "^12.26.1",
+    "framer-motion": "^12.33.0",
     "lucide-react": "^0.562.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
