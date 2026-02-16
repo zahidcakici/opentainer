@@ -1,12 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { Image } from '../types';
+import type { Image, ApiResult } from '../types';
 import { api } from '../lib/api';
-
-interface ApiResult<T> {
-    success: boolean;
-    data?: T;
-    error?: string;
-}
 
 interface UseImagesReturn {
     images: Image[];

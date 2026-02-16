@@ -1,12 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { Volume } from '../types';
+import type { Volume, ApiResult } from '../types';
 import { api } from '../lib/api';
-
-interface ApiResult<T> {
-    success: boolean;
-    data?: T;
-    error?: string;
-}
 
 interface UseVolumesReturn {
     volumes: Volume[];

@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 // Define the interface for the API
 export interface DockerStatusResponse {
@@ -29,7 +30,6 @@ export interface AppApi {
     listVolumes: () => Promise<{ success: boolean; data?: any[]; error?: string }>;
     removeVolume: (name: string) => Promise<{ success: boolean; error?: string }>;
     listNetworks: () => Promise<{ success: boolean; data?: any[]; error?: string }>;
-    getContainerStats: (id: string) => Promise<{ success: boolean; data?: any; error?: string }>;
     getBatchStats: (ids: string[]) => Promise<{ success: boolean; data?: { id: string; success: boolean; data?: any; error?: string }[]; error?: string }>;
     openExternal: (url: string) => Promise<{ success: boolean; error?: string }>;
     getAppVersion: () => Promise<string>;
@@ -45,10 +45,18 @@ export interface AppApi {
 export const api: AppApi = {
     getAppVersion: async () => invoke("get_app_version"),
     openExternal: async (url: string) => {
+        console.log("Opening external URL:", url);
         try {
-            await (window as any).__TAURI_PLUGIN_OPENER__.open(url);
+            await openUrl(url);
             return { success: true };
         } catch (e: any) {
+            console.error("Failed to open external URL:", e);
+            // Fallback for debugging if openUrl fails
+            try {
+                window.open(url, '_blank');
+            } catch (innerErr) {
+                console.error("Window.open fallback also failed:", innerErr);
+            }
             return { success: false, error: e.toString() };
         }
     },
@@ -85,7 +93,7 @@ export const api: AppApi = {
             invoke("stop_logs", { sessionId });
         };
     },
-    startExec: (sessionId: string, _cols: number, _rows: number, onData: (data: string) => void, containerId: string) => {
+    startExec: (sessionId: string, cols: number, rows: number, onData: (data: string) => void, containerId: string) => {
         const eventName = `exec-${sessionId}`;
         let unlisten: (() => void) | undefined;
         let active = true;
@@ -96,7 +104,7 @@ export const api: AppApi = {
             });
             unlisten = cleanup;
             if (active) {
-                await invoke("start_exec", { sessionId, containerId });
+                await invoke("start_exec", { sessionId, containerId, cols, rows });
             } else {
                 cleanup();
             }
@@ -110,8 +118,10 @@ export const api: AppApi = {
                     invoke("exec_input", { sessionId, data });
                 }
             },
-            resize: (_w: number, _h: number) => {
-                // Resize not implemented yet - would require exec resize in Docker
+            resize: (cols: number, rows: number) => {
+                if (active) {
+                    invoke("exec_resize", { sessionId, cols, rows });
+                }
             },
             dispose: () => {
                 active = false;
@@ -169,7 +179,6 @@ export const api: AppApi = {
         };
     },
     removeVolume: async (name: string) => invoke("remove_volume", { name }),
-    getContainerStats: async () => ({ success: false, error: "Use getBatchStats instead" }),
     // Docker lifecycle methods
     checkColimaInstalled: async () => invoke("check_colima_installed"),
     checkDockerRunning: async () => invoke("check_docker_running"),

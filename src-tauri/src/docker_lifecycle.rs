@@ -1,4 +1,4 @@
-use std::process::Command;
+use tokio::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::time::sleep;
@@ -57,12 +57,13 @@ pub async fn check_docker_running() -> bool {
 }
 
 /// Check if Colima is installed on the system (macOS)
-pub fn check_colima_installed() -> bool {
+pub async fn check_colima_installed() -> bool {
     #[cfg(target_os = "macos")]
     {
         Command::new("which")
             .arg("colima")
             .output()
+            .await
             .map(|o| o.status.success())
             .unwrap_or(false)
     }
@@ -73,6 +74,7 @@ pub fn check_colima_installed() -> bool {
         Command::new("which")
             .arg("docker")
             .output()
+            .await
             .map(|o| o.status.success())
             .unwrap_or(false)
     }
@@ -106,7 +108,7 @@ pub async fn start_docker_runtime() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         // First check if already running
-        let status_output = Command::new("colima").arg("status").output();
+        let status_output = Command::new("colima").arg("status").output().await;
 
         if let Ok(output) = status_output {
             if output.status.success() {
@@ -144,6 +146,7 @@ pub async fn start_docker_runtime() -> Result<(), String> {
         let output = Command::new("systemctl")
             .args(["start", "docker"])
             .output()
+            .await
             .map_err(|e| format!("Failed to start Docker: {}", e))?;
 
         if !output.status.success() {
@@ -173,6 +176,7 @@ pub async fn stop_docker_runtime() -> Result<(), String> {
         let output = Command::new("colima")
             .arg("stop")
             .output()
+            .await
             .map_err(|e| format!("Failed to stop Colima: {}", e))?;
 
         if !output.status.success() {
@@ -192,6 +196,7 @@ pub async fn stop_docker_runtime() -> Result<(), String> {
         let output = Command::new("systemctl")
             .args(["stop", "docker"])
             .output()
+            .await
             .map_err(|e| format!("Failed to stop Docker: {}", e))?;
 
         if !output.status.success() {
@@ -230,7 +235,7 @@ pub async fn wait_for_docker_ready(timeout_secs: u64) -> Result<(), String> {
 /// Get comprehensive Docker status
 pub async fn get_docker_status() -> DockerStatus {
     let running = check_docker_running().await;
-    let colima_installed = check_colima_installed();
+    let colima_installed = check_colima_installed().await;
     let we_started = WE_STARTED_DOCKER.load(Ordering::SeqCst);
 
     DockerStatus {
@@ -275,9 +280,9 @@ mod tests {
         println!("Docker running: {}", running);
     }
 
-    #[test]
-    fn test_check_colima_installed() {
-        let installed = check_colima_installed();
+    #[tokio::test]
+    async fn test_check_colima_installed() {
+        let installed = check_colima_installed().await;
         println!("Colima installed: {}", installed);
     }
 }

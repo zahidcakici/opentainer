@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { useImages } from '../hooks/useImages';
 import { useContainers } from '../hooks/useContainers';
-import { Trash2, Download, PackageOpen, ArrowUp, ArrowDown, CheckCircle2 } from 'lucide-react';
+import { Trash2, Download, PackageOpen, ArrowUp, ArrowDown } from 'lucide-react';
 import byteSize from 'byte-size';
 import { formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -53,22 +53,7 @@ const ImageItem: React.FC<ImageItemProps> = React.memo(({ img, onRemove, inUse }
                 <span title={img.tag} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: inUse ? 500 : 400 }}>
                     {img.tag}
                 </span>
-                {inUse && (
-                    <span style={{
-                        fontSize: '10px',
-                        color: 'var(--status-running)',
-                        background: 'rgba(34, 197, 94, 0.1)',
-                        padding: '1px 6px',
-                        borderRadius: '10px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        fontWeight: 600
-                    }}>
-                        <CheckCircle2 size={10} />
-                        In Use
-                    </span>
-                )}
+
             </div>
             <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{img.shortId}</span>
             <span style={{ color: 'var(--text-secondary)' }}>{created}</span>

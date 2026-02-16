@@ -189,7 +189,7 @@ const DockerStatus: React.FC<DockerStatusProps> = ({ state, errorMessage, onRetr
                                     }}
                                     initial={{ width: '0%' }}
                                     animate={{ width: '100%' }}
-                                    transition={{ duration: 60, ease: 'linear' }}
+                                    transition={{ duration: 15, ease: 'linear' }}
                                 />
                             </div>
                         </>
@@ -242,7 +242,7 @@ const DockerStatus: React.FC<DockerStatusProps> = ({ state, errorMessage, onRetr
                     color: 'var(--text-muted)',
                     fontSize: '12px',
                 }}>
-                    <img src="/icon-64.png" alt="Opentainer" style={{ width: '16px', height: '16px', opacity: 0.5 }} />
+                    <img src="/icon-256.png" alt="Opentainer" style={{ width: '16px', height: '16px', opacity: 0.5 }} />
                     Opentainer
                 </div>
             </motion.div>

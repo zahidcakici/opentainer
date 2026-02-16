@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import '@xterm/xterm/css/xterm.css';
+import { getTerminalTheme } from '../lib/terminalTheme';
 import { useTheme } from '../context/ThemeContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, ChevronUp, ChevronDown, X, Trash2, Clock, Download, ArrowDown } from 'lucide-react';
@@ -32,23 +33,8 @@ const LogsView: React.FC<LogsViewProps> = ({ containerId, active }) => {
     useEffect(() => {
         if (!containerId || !terminalRef.current) return;
 
-        const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-
         const term = new Terminal({
-            theme: {
-                background: isDark ? '#0f0f10' : '#ffffff',
-                foreground: isDark ? '#f4f4f5' : '#18181b',
-                cursor: isDark ? '#f4f4f5' : '#18181b',
-                selectionBackground: isDark ? '#3f3f46' : '#e4e4e7',
-                black: isDark ? '#000000' : '#000000',
-                red: '#ef4444',
-                green: '#22c55e',
-                yellow: '#f59e0b',
-                blue: '#3b82f6',
-                magenta: '#a855f7',
-                cyan: '#06b6d4',
-                white: isDark ? '#ffffff' : '#e5e7eb',
-            },
+            theme: getTerminalTheme(theme),
             fontFamily: '"JetBrains Mono", "Menlo", "Monaco", "Consolas", monospace',
             fontSize: 13,
             fontWeight: '400',
@@ -128,23 +114,7 @@ const LogsView: React.FC<LogsViewProps> = ({ containerId, active }) => {
     // Handle theme updates dynamically
     useEffect(() => {
         if (!xtermRef.current) return;
-
-        const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-
-        xtermRef.current.options.theme = {
-            background: isDark ? '#0f0f10' : '#ffffff',
-            foreground: isDark ? '#f4f4f5' : '#18181b',
-            cursor: isDark ? '#f4f4f5' : '#18181b',
-            selectionBackground: isDark ? '#3f3f46' : '#e4e4e7',
-            black: isDark ? '#000000' : '#000000',
-            red: '#ef4444',
-            green: '#22c55e',
-            yellow: '#f59e0b',
-            blue: '#3b82f6',
-            magenta: '#a855f7',
-            cyan: '#06b6d4',
-            white: isDark ? '#ffffff' : '#e5e7eb',
-        };
+        xtermRef.current.options.theme = getTerminalTheme(theme);
     }, [theme]);
 
     useEffect(() => {

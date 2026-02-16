@@ -1,12 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { Container } from '../types';
+import type { Container, ApiResult } from '../types';
 import { api } from '../lib/api';
-
-interface ApiResult<T> {
-    success: boolean;
-    data?: T;
-    error?: string;
-}
 
 interface UseContainersReturn {
     containers: Container[];

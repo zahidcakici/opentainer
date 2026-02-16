@@ -1,9 +1,16 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useTheme } from '../context/ThemeContext';
 import { Moon, Sun, Monitor } from 'lucide-react';
+import { api } from '../lib/api';
 
 const Settings = () => {
     const { theme, setTheme } = useTheme();
+    const [version, setVersion] = useState<string>('');
+
+    useEffect(() => {
+        api.getAppVersion().then(setVersion).catch(() => setVersion('unknown'));
+    }, []);
 
     const themes: { id: 'light' | 'dark' | 'system'; label: string; icon: any }[] = [
         { id: 'light', label: 'Light', icon: Sun },
@@ -71,7 +78,7 @@ const Settings = () => {
                     </p>
 
                     <div style={{ marginTop: '16px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                        <p>Version 0.1.0-alpha</p>
+                        <p>Version {version || '…'}</p>
                         <p style={{ marginTop: '4px' }}>License: MIT</p>
                     </div>
                 </div>

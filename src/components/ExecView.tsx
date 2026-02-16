@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
+import { getTerminalTheme } from '../lib/terminalTheme';
 import { useTheme } from '../context/ThemeContext';
 import { Terminal as TerminalIcon, AlertCircle } from 'lucide-react';
 
@@ -20,31 +21,21 @@ const ExecView: React.FC<ExecViewProps> = ({ containerId, active, isRunning }) =
     const fitAddonRef = useRef<FitAddon | null>(null);
     const execSessionRef = useRef<any>(null);
 
-    useEffect(() => {
-        if (!containerId || !terminalRef.current || !isRunning) return;
+    const initializedRef = useRef<boolean>(false);
 
-        const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    useEffect(() => {
+        if (!containerId || !terminalRef.current || !isRunning || !active || initializedRef.current) return;
+
+        initializedRef.current = true;
 
         const term = new Terminal({
-            theme: {
-                background: isDark ? '#0f0f10' : '#ffffff',
-                foreground: isDark ? '#f4f4f5' : '#18181b',
-                cursor: isDark ? '#f4f4f5' : '#18181b',
-                selectionBackground: isDark ? '#3f3f46' : '#e4e4e7',
-                black: isDark ? '#000000' : '#000000',
-                red: '#ef4444',
-                green: '#22c55e',
-                yellow: '#f59e0b',
-                blue: '#3b82f6',
-                magenta: '#a855f7',
-                cyan: '#06b6d4',
-                white: isDark ? '#ffffff' : '#e5e7eb',
-            },
+            theme: getTerminalTheme(theme),
             fontFamily: '"JetBrains Mono", "Menlo", "Monaco", "Consolas", monospace',
             fontSize: 13,
             lineHeight: 1.2,
             cursorBlink: true,
             scrollback: 1000,
+            allowTransparency: true,
         });
 
         const fitAddon = new FitAddon();
@@ -56,6 +47,10 @@ const ExecView: React.FC<ExecViewProps> = ({ containerId, active, isRunning }) =
         xtermRef.current = term;
         fitAddonRef.current = fitAddon;
 
+        // Ensure we have at least some dimensions, default to 80x24 if fit failed
+        const cols = term.cols || 80;
+        const rows = term.rows || 24;
+
         // Generate a unique session ID
         const sessionId = `${containerId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
@@ -64,8 +59,8 @@ const ExecView: React.FC<ExecViewProps> = ({ containerId, active, isRunning }) =
 
         currentExecSession = api.startExec(
             sessionId,
-            term.cols,
-            term.rows,
+            cols,
+            rows,
             (data: string) => {
                 if (!disposed) term.write(data);
             },
@@ -78,6 +73,24 @@ const ExecView: React.FC<ExecViewProps> = ({ containerId, active, isRunning }) =
         });
         term.onResize(({ cols, rows }) => {
             if (currentExecSession && !disposed) currentExecSession.resize(cols, rows);
+        });
+
+        // Clipboard support (Cmd+C / Cmd+V on macOS)
+        term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+            const isMeta = e.metaKey || e.ctrlKey;
+            if (e.type !== 'keydown' || !isMeta) return true;
+
+            if (e.key === 'c' && term.hasSelection()) {
+                navigator.clipboard.writeText(term.getSelection());
+                return false; // prevent xterm from sending Ctrl+C
+            }
+            if (e.key === 'v') {
+                navigator.clipboard.readText().then(text => {
+                    if (currentExecSession && !disposed) currentExecSession.write(text);
+                });
+                return false;
+            }
+            return true;
         });
 
         const handleResize = () => {
@@ -95,29 +108,13 @@ const ExecView: React.FC<ExecViewProps> = ({ containerId, active, isRunning }) =
             term.dispose();
             xtermRef.current = null;
             execSessionRef.current = null;
+            initializedRef.current = false;
         };
-    }, [containerId, isRunning]); // Dependencies updated
+    }, [containerId, isRunning, active]); // Added active to dependencies
 
-    // Handle theme updates dynamically
     useEffect(() => {
         if (!xtermRef.current) return;
-
-        const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-
-        xtermRef.current.options.theme = {
-            background: isDark ? '#0f0f10' : '#ffffff',
-            foreground: isDark ? '#f4f4f5' : '#18181b',
-            cursor: isDark ? '#f4f4f5' : '#18181b',
-            selectionBackground: isDark ? '#3f3f46' : '#e4e4e7',
-            black: isDark ? '#000000' : '#000000',
-            red: '#ef4444',
-            green: '#22c55e',
-            yellow: '#f59e0b',
-            blue: '#3b82f6',
-            magenta: '#a855f7',
-            cyan: '#06b6d4',
-            white: isDark ? '#ffffff' : '#e5e7eb',
-        };
+        xtermRef.current.options.theme = getTerminalTheme(theme);
     }, [theme]);
 
     useEffect(() => {

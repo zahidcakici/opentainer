@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useVolumes } from '../hooks/useVolumes';
 import { useContainers } from '../hooks/useContainers';
-import { Trash2, HardDrive, ArrowUp, ArrowDown, CheckCircle2 } from 'lucide-react';
+import { Trash2, HardDrive, ArrowUp, ArrowDown } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import byteSize from 'byte-size';
@@ -54,23 +54,7 @@ const VolumeItem: React.FC<VolumeItemProps> = React.memo(({ vol, onRemove }) => 
                 <span title={vol.Name} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: inUse ? 500 : 400 }}>
                     {vol.Name}
                 </span>
-                {inUse && (
-                    <span style={{
-                        fontSize: '9px',
-                        color: 'var(--status-running)',
-                        background: 'rgba(34, 197, 94, 0.1)',
-                        padding: '1px 5px',
-                        borderRadius: '10px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '3px',
-                        fontWeight: 600,
-                        flexShrink: 0
-                    }}>
-                        <CheckCircle2 size={10} />
-                        In Use
-                    </span>
-                )}
+
             </div>
 
             <div style={{ overflow: 'hidden', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>

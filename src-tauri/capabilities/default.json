@@ -7,6 +7,18 @@
   ],
   "permissions": [
     "core:default",
-    "core:window:allow-start-dragging"
+    "core:window:allow-start-dragging",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "http://localhost:*"
+        },
+        {
+          "url": "http://127.0.0.1:*"
+        }
+      ]
+    },
+    "opener:default"
   ]
 }

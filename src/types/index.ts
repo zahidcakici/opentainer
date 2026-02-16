@@ -1,3 +1,9 @@
+export interface ApiResult<T> {
+    success: boolean;
+    data?: T;
+    error?: string;
+}
+
 export interface Container {
     Id: string;
     Names: string[];

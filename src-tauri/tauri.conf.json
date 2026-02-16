@@ -29,9 +29,6 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "macOS": {
-      "signingIdentity": "-"
-    },
     "shortDescription": "Opentainer",
     "publisher": "Zahid Cakici",
     "icon": [

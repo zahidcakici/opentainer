@@ -132,6 +132,7 @@ const ContainerDrawer: React.FC<ContainerDrawerProps> = ({ container, onClose })
                 </div>
                 <div style={{ display: tab === 'exec' ? 'flex' : 'none', flex: 1, flexDirection: 'column' }}>
                     <ExecView
+                        key={container.Id}
                         containerId={container.Id}
                         active={tab === 'exec'}
                         isRunning={container.State === 'running'}
