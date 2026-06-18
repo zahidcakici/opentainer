@@ -1,5 +1,6 @@
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Box, Download, AlertTriangle, Loader2 } from 'lucide-react';
+import { Box, Download, AlertTriangle, Loader2, Copy, Check } from 'lucide-react';
 import { api } from '../lib/api';
 
 export type DockerState = 'checking' | 'not-installed' | 'starting' | 'stopping' | 'ready' | 'error';
@@ -8,9 +9,27 @@ interface DockerStatusProps {
     state: DockerState;
     errorMessage?: string;
     onRetry?: () => void;
+    colimaOutput?: string[];
+    downloadProgress?: number | null;
 }
 
-const DockerStatus: React.FC<DockerStatusProps> = ({ state, errorMessage, onRetry }) => {
+const DockerStatus: React.FC<DockerStatusProps> = ({ state, errorMessage, onRetry, colimaOutput, downloadProgress }) => {
+    const [copied, setCopied] = useState(false);
+    const logEndRef = useRef<HTMLDivElement>(null);
+
+    // Auto-scroll log to bottom
+    useEffect(() => {
+        if (logEndRef.current) {
+            logEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [colimaOutput]);
+
+    const handleCopy = () => {
+        navigator.clipboard.writeText('brew install colima docker');
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
     if (state === 'ready') {
         return null;
     }
@@ -39,7 +58,7 @@ const DockerStatus: React.FC<DockerStatusProps> = ({ state, errorMessage, onRetr
         background: 'var(--bg-panel)',
         borderRadius: '16px',
         border: '1px solid var(--border-subtle)',
-        maxWidth: '400px',
+        maxWidth: '480px',
         width: '100%',
         textAlign: 'center',
     };
@@ -60,6 +79,7 @@ const DockerStatus: React.FC<DockerStatusProps> = ({ state, errorMessage, onRetr
         fontWeight: 600,
         color: 'var(--text-primary)',
         margin: 0,
+        userSelect: 'text',
     };
 
     const descStyle: React.CSSProperties = {
@@ -67,6 +87,7 @@ const DockerStatus: React.FC<DockerStatusProps> = ({ state, errorMessage, onRetr
         color: 'var(--text-secondary)',
         lineHeight: 1.6,
         margin: 0,
+        userSelect: 'text',
     };
 
     const buttonStyle: React.CSSProperties = {
@@ -94,6 +115,30 @@ const DockerStatus: React.FC<DockerStatusProps> = ({ state, errorMessage, onRetr
         color: 'var(--text-secondary)',
         border: '1px solid var(--border-subtle)',
     };
+
+    const logContainerStyle: React.CSSProperties = {
+        width: '100%',
+        maxHeight: '120px',
+        overflowY: 'auto',
+        background: 'var(--bg-hover)',
+        borderRadius: '8px',
+        border: '1px solid var(--border-subtle)',
+        padding: '8px 12px',
+        textAlign: 'left',
+    };
+
+    const logLineStyle: React.CSSProperties = {
+        fontFamily: 'var(--font-mono)',
+        fontSize: '11px',
+        color: 'var(--text-secondary)',
+        lineHeight: 1.5,
+        margin: 0,
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-all',
+    };
+
+    const hasProgress = typeof downloadProgress === 'number' && downloadProgress > 0;
+    const hasOutput = colimaOutput && colimaOutput.length > 0;
 
     return (
         <AnimatePresence>
@@ -143,8 +188,31 @@ const DockerStatus: React.FC<DockerStatusProps> = ({ state, errorMessage, onRetr
                                 fontSize: '12px',
                                 color: 'var(--text-primary)',
                                 width: '100%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '12px',
+                                userSelect: 'text',
+                                cursor: 'text',
+                                border: '1px solid var(--border-subtle)',
                             }}>
-                                brew install colima docker
+                                <code style={{ userSelect: 'text' }}>brew install colima docker</code>
+                                <button
+                                    onClick={handleCopy}
+                                    style={{
+                                        padding: '4px',
+                                        borderRadius: '4px',
+                                        color: copied ? 'var(--status-running)' : 'var(--text-secondary)',
+                                        transition: 'all 0.2s ease',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        background: copied ? 'rgba(16, 185, 129, 0.1)' : 'transparent',
+                                    }}
+                                    title="Copy to clipboard"
+                                >
+                                    {copied ? <Check size={14} /> : <Copy size={14} />}
+                                </button>
                             </div>
                             <div style={{ display: 'flex', gap: '12px' }}>
                                 <button style={primaryButtonStyle} onClick={() => api.openExternal('https://github.com/abiosoft/colima')}>
@@ -172,8 +240,12 @@ const DockerStatus: React.FC<DockerStatusProps> = ({ state, errorMessage, onRetr
                             </div>
                             <h2 style={titleStyle}>Starting Docker</h2>
                             <p style={descStyle}>
-                                Docker is being started. This may take a few moments...
+                                {hasProgress
+                                    ? 'Downloading VM disk image. This only happens on the first run...'
+                                    : 'Docker is being started. This may take a few moments...'}
                             </p>
+
+                            {/* Progress bar */}
                             <div style={{
                                 width: '100%',
                                 height: '4px',
@@ -181,17 +253,52 @@ const DockerStatus: React.FC<DockerStatusProps> = ({ state, errorMessage, onRetr
                                 borderRadius: '2px',
                                 overflow: 'hidden',
                             }}>
-                                <motion.div
-                                    style={{
-                                        height: '100%',
-                                        background: 'var(--status-running)',
-                                        borderRadius: '2px',
-                                    }}
-                                    initial={{ width: '0%' }}
-                                    animate={{ width: '100%' }}
-                                    transition={{ duration: 15, ease: 'linear' }}
-                                />
+                                {hasProgress ? (
+                                    <motion.div
+                                        style={{
+                                            height: '100%',
+                                            background: 'var(--status-running)',
+                                            borderRadius: '2px',
+                                        }}
+                                        initial={false}
+                                        animate={{ width: `${downloadProgress}%` }}
+                                        transition={{ duration: 0.3, ease: 'easeOut' }}
+                                    />
+                                ) : (
+                                    <motion.div
+                                        style={{
+                                            height: '100%',
+                                            width: '30%',
+                                            background: 'var(--status-running)',
+                                            borderRadius: '2px',
+                                        }}
+                                        animate={{ x: ['0%', '233%', '0%'] }}
+                                        transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                                    />
+                                )}
                             </div>
+
+                            {/* Download percentage label */}
+                            {hasProgress && (
+                                <p style={{
+                                    fontSize: '12px',
+                                    color: 'var(--text-muted)',
+                                    margin: '-16px 0 0 0',
+                                    fontFamily: 'var(--font-mono)',
+                                }}>
+                                    {downloadProgress!.toFixed(1)}%
+                                </p>
+                            )}
+
+                            {/* Colima activity log */}
+                            {hasOutput && (
+                                <div style={logContainerStyle}>
+                                    {colimaOutput!.map((line, i) => (
+                                        <p key={i} style={logLineStyle}>{line}</p>
+                                    ))}
+                                    <div ref={logEndRef} />
+                                </div>
+                            )}
                         </>
                     )}
 
@@ -251,3 +358,4 @@ const DockerStatus: React.FC<DockerStatusProps> = ({ state, errorMessage, onRetr
 };
 
 export default DockerStatus;
+

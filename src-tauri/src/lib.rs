@@ -535,7 +535,9 @@ async fn list_volumes(
     // Use CLI directly for usage data as API is unreliable for this specific data
     log::info!("Fetching volume usage data via CLI");
     let path = docker_state.get_path();
-    let mut cmd = std::process::Command::new("docker");
+    let docker_bin = docker_lifecycle::find_binary("docker").unwrap_or_else(|| "docker".to_string());
+    let mut cmd = std::process::Command::new(&docker_bin);
+    cmd.env("PATH", docker_lifecycle::enriched_path());
     
     if path != "default" && !path.is_empty() {
             cmd.arg("-H").arg(format!("unix://{}", path));
@@ -772,8 +774,8 @@ async fn get_docker_status() -> Result<CommandResponse<docker_lifecycle::DockerS
 }
 
 #[tauri::command]
-async fn start_docker() -> Result<CommandResponse<()>, String> {
-    match docker_lifecycle::start_docker_runtime().await {
+async fn start_docker(app_handle: tauri::AppHandle) -> Result<CommandResponse<()>, String> {
+    match docker_lifecycle::start_docker_runtime(Some(app_handle)).await {
         Ok(_) => Ok(CommandResponse::ok_empty()),
         Err(e) => Ok(CommandResponse::err(e)),
     }

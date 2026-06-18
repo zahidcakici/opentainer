@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import Layout from './components/Layout';
 import ContainerList from './components/ContainerList';
@@ -12,14 +12,30 @@ import { api } from './lib/api';
 // Increased timeout for first-run Colima (may download VM image)
 const DOCKER_TIMEOUT_SECONDS = 300;
 
+// Maximum number of log lines to keep in state
+const MAX_LOG_LINES = 50;
+
+interface ColimaProgressEvent {
+  message: string;
+  is_download: boolean;
+  percent: number | null;
+  speed: string | null;
+  eta: string | null;
+}
+
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('containers');
   const [dockerState, setDockerState] = useState<DockerState>('checking');
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
+  const [colimaOutput, setColimaOutput] = useState<string[]>([]);
+  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+  const colimaUnlisten = useRef<(() => void) | null>(null);
 
   const checkAndStartDocker = useCallback(async () => {
     setDockerState('checking');
     setErrorMessage(undefined);
+    setColimaOutput([]);
+    setDownloadProgress(null);
 
     try {
       // Check if Docker is RUNNING first (supports any provider: Orbstack, Podman, Docker Desktop, etc.)
@@ -36,6 +52,25 @@ const App: React.FC = () => {
         setDockerState('not-installed');
         return;
       }
+
+      // Set up listener for colima output BEFORE starting
+      const unlisten = await listen<ColimaProgressEvent>('colima-output', (event) => {
+        const progress = event.payload;
+
+        // Add the message to the log (keep last N lines)
+        if (progress.message) {
+          setColimaOutput(prev => {
+            const next = [...prev, progress.message];
+            return next.length > MAX_LOG_LINES ? next.slice(-MAX_LOG_LINES) : next;
+          });
+        }
+
+        // Update download progress if available
+        if (progress.percent !== null && progress.percent !== undefined) {
+          setDownloadProgress(progress.percent);
+        }
+      });
+      colimaUnlisten.current = unlisten;
 
       // Colima is installed but Docker not running - start it
       setDockerState('starting');
@@ -75,6 +110,11 @@ const App: React.FC = () => {
     const unlistenPromise = setupStoppingListener();
     return () => {
       unlistenPromise.then(unlisten => unlisten());
+      // Clean up colima output listener
+      if (colimaUnlisten.current) {
+        colimaUnlisten.current();
+        colimaUnlisten.current = null;
+      }
     };
   }, [checkAndStartDocker]);
 
@@ -85,6 +125,8 @@ const App: React.FC = () => {
         state={dockerState}
         errorMessage={errorMessage}
         onRetry={checkAndStartDocker}
+        colimaOutput={colimaOutput}
+        downloadProgress={downloadProgress}
       />
     );
   }
@@ -101,3 +143,4 @@ const App: React.FC = () => {
 }
 
 export default App;
+
