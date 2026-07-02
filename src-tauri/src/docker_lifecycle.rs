@@ -1,18 +1,18 @@
-use tokio::process::Command;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 use std::time::Duration;
-use tokio::time::sleep;
 use tauri::Emitter;
+use tokio::process::Command;
+use tokio::time::sleep;
 
 /// Well-known directories where Homebrew (and other package managers) install binaries.
 /// Bundled macOS .app processes do NOT inherit the user's shell PATH, so we must
 /// search these locations explicitly.
 #[cfg(target_os = "macos")]
 const EXTRA_BIN_DIRS: &[&str] = &[
-    "/opt/homebrew/bin",   // Apple Silicon Homebrew
-    "/usr/local/bin",      // Intel Homebrew / manual installs
+    "/opt/homebrew/bin", // Apple Silicon Homebrew
+    "/usr/local/bin",    // Intel Homebrew / manual installs
     "/usr/bin",
 ];
 
@@ -151,7 +151,11 @@ pub fn find_binary(name: &str) -> Option<String> {
         .filter(|o| o.status.success())
         .and_then(|o| {
             let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
-            if s.is_empty() { None } else { Some(s) }
+            if s.is_empty() {
+                None
+            } else {
+                Some(s)
+            }
         })
 }
 
@@ -160,8 +164,7 @@ pub fn find_binary(name: &str) -> Option<String> {
 /// docker, etc.) can also be found.
 #[cfg(target_os = "macos")]
 fn colima_command() -> Result<Command, String> {
-    let bin = find_binary("colima")
-        .ok_or_else(|| "Colima binary not found".to_string())?;
+    let bin = find_binary("colima").ok_or_else(|| "Colima binary not found".to_string())?;
     let mut cmd = Command::new(bin);
     cmd.env("PATH", enriched_path());
     Ok(cmd)
@@ -229,11 +232,13 @@ pub fn recommended_resources() -> ColimaResources {
         .unwrap_or(4);
     let cpu = (cores / 2).clamp(2, 8);
 
-    let memory = host_memory_gb()
-        .map(|gb| (gb / 4).clamp(4, 8))
-        .unwrap_or(4);
+    let memory = host_memory_gb().map(|gb| (gb / 4).clamp(4, 8)).unwrap_or(4);
 
-    ColimaResources { cpu, memory, disk: 60 }
+    ColimaResources {
+        cpu,
+        memory,
+        disk: 60,
+    }
 }
 
 /// Structured progress info emitted to the frontend
@@ -268,7 +273,8 @@ fn parse_colima_progress(line: &str) -> ColimaProgress {
     if let Some(pct_pos) = trimmed.find('%') {
         // Walk backwards from '%' to find the number
         let before = &trimmed[..pct_pos];
-        let num_start = before.rfind(|c: char| !c.is_ascii_digit() && c != '.')
+        let num_start = before
+            .rfind(|c: char| !c.is_ascii_digit() && c != '.')
             .map(|i| i + 1)
             .unwrap_or(0);
         if let Ok(pct) = before[num_start..].parse::<f64>() {
@@ -284,7 +290,8 @@ fn parse_colima_progress(line: &str) -> ColimaProgress {
         if let Some(unit_pos) = trimmed.find(unit) {
             // Walk backwards from the unit to find the speed number
             let before = trimmed[..unit_pos].trim_end();
-            let num_start = before.rfind(|c: char| !c.is_ascii_digit() && c != '.')
+            let num_start = before
+                .rfind(|c: char| !c.is_ascii_digit() && c != '.')
                 .map(|i| i + 1)
                 .unwrap_or(0);
             let speed_str = &before[num_start..];
@@ -302,8 +309,16 @@ fn parse_colima_progress(line: &str) -> ColimaProgress {
         let after = trimmed[eta_pos + 3..].trim();
         if !after.is_empty() {
             // Take until end of line or next whitespace block after time
-            let eta_str: String = after.chars()
-                .take_while(|c| c.is_ascii_digit() || *c == 'm' || *c == 's' || *c == 'h' || *c == ':' || *c == ' ')
+            let eta_str: String = after
+                .chars()
+                .take_while(|c| {
+                    c.is_ascii_digit()
+                        || *c == 'm'
+                        || *c == 's'
+                        || *c == 'h'
+                        || *c == ':'
+                        || *c == ' '
+                })
                 .collect();
             let eta_trimmed = eta_str.trim().to_string();
             if !eta_trimmed.is_empty() {
@@ -314,9 +329,8 @@ fn parse_colima_progress(line: &str) -> ColimaProgress {
 
     // Also detect download by keywords
     if !is_download {
-        is_download = lower.contains("download")
-            || lower.contains("pulling")
-            || lower.contains("fetching");
+        is_download =
+            lower.contains("download") || lower.contains("pulling") || lower.contains("fetching");
     }
 
     ColimaProgress {
@@ -403,10 +417,10 @@ pub async fn start_docker_runtime(
     #[cfg(target_os = "macos")]
     {
         // First check if already running
-        let status_output = colima_command().map_err(|e| {
-            START_IN_PROGRESS.store(false, Ordering::SeqCst);
-            e
-        })?
+        let status_output = colima_command()
+            .inspect_err(|_| {
+                START_IN_PROGRESS.store(false, Ordering::SeqCst);
+            })?
             .arg("status")
             .output()
             .await;
@@ -429,19 +443,24 @@ pub async fn start_docker_runtime(
         let memory = res.memory.to_string();
         let disk = res.disk.to_string();
 
-        let child = colima_command().map_err(|e| {
-            START_IN_PROGRESS.store(false, Ordering::SeqCst);
-            e
-        })?
+        let child = colima_command()
+            .inspect_err(|_| {
+                START_IN_PROGRESS.store(false, Ordering::SeqCst);
+            })?
             // `--vm-type vz` uses Apple's Virtualization.framework so we don't
             // need to bundle QEMU; `virtiofs` is the matching mount type.
             .args([
                 "start",
-                "--cpu", &cpu,
-                "--memory", &memory,
-                "--disk", &disk,
-                "--vm-type", "vz",
-                "--mount-type", "virtiofs",
+                "--cpu",
+                &cpu,
+                "--memory",
+                &memory,
+                "--disk",
+                &disk,
+                "--vm-type",
+                "vz",
+                "--mount-type",
+                "virtiofs",
             ])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -537,13 +556,16 @@ async fn stream_colima_output(mut child: tokio::process::Child, app_handle: taur
         Ok(status) => {
             log::info!("Colima process exited with status: {}", status);
             if !status.success() {
-                let _ = app_handle.emit("colima-output", &ColimaProgress {
-                    message: format!("Colima exited with status: {}", status),
-                    is_download: false,
-                    percent: None,
-                    speed: None,
-                    eta: None,
-                });
+                let _ = app_handle.emit(
+                    "colima-output",
+                    &ColimaProgress {
+                        message: format!("Colima exited with status: {}", status),
+                        is_download: false,
+                        percent: None,
+                        speed: None,
+                        eta: None,
+                    },
+                );
             }
         }
         Err(e) => {
@@ -678,7 +700,11 @@ mod tests {
     fn recommended_resources_within_bounds() {
         let r = recommended_resources();
         assert!((2..=8).contains(&r.cpu), "cpu {} out of range", r.cpu);
-        assert!((4..=8).contains(&r.memory), "memory {} out of range", r.memory);
+        assert!(
+            (4..=8).contains(&r.memory),
+            "memory {} out of range",
+            r.memory
+        );
         assert_eq!(r.disk, 60);
     }
 

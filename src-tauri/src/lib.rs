@@ -3,9 +3,9 @@ mod settings;
 
 use settings::AppSettings;
 
+use bollard::exec::ResizeExecOptions;
 use bollard::exec::{CreateExecOptions, StartExecResults};
 use bollard::models::ContainerStatsResponse;
-use bollard::exec::ResizeExecOptions;
 use bollard::query_parameters::{
     CreateImageOptions, ListContainersOptions, ListImagesOptions, ListNetworksOptions,
     ListVolumesOptions, LogsOptions, RemoveImageOptions, RemoveVolumeOptions, StatsOptions,
@@ -40,11 +40,8 @@ fn connect_docker() -> Result<(Docker, String), bollard::errors::Error> {
         if let Ok(home) = std::env::var("HOME") {
             let colima_socket = format!("{home}/.colima/default/docker.sock");
             if std::path::Path::new(&colima_socket).exists() {
-                let d = Docker::connect_with_socket(
-                    &colima_socket,
-                    120,
-                    bollard::API_DEFAULT_VERSION,
-                )?;
+                let d =
+                    Docker::connect_with_socket(&colima_socket, 120, bollard::API_DEFAULT_VERSION)?;
                 return Ok((d, colima_socket));
             }
         }
@@ -86,7 +83,7 @@ impl DockerState {
                 return Ok(docker.clone());
             }
         }
-        
+
         self.connect_with_retry()
     }
 
@@ -241,7 +238,15 @@ fn start_exec(
                 let docker_c = docker.clone();
                 let exec_id_c = exec.id.clone();
                 tauri::async_runtime::spawn(async move {
-                    let _ = docker_c.resize_exec(&exec_id_c, ResizeExecOptions { width: cols, height: rows }).await;
+                    let _ = docker_c
+                        .resize_exec(
+                            &exec_id_c,
+                            ResizeExecOptions {
+                                width: cols,
+                                height: rows,
+                            },
+                        )
+                        .await;
                 });
 
                 let event_name = format!("exec-{}", session_id_clone);
@@ -280,7 +285,15 @@ fn start_exec(
     });
 
     let mut lock = state.inner().0.lock().unwrap();
-    if let Some(old_session) = lock.insert(session_id, ExecSession { handle, input_tx, docker: docker_for_resize, exec_id: exec_id_shared }) {
+    if let Some(old_session) = lock.insert(
+        session_id,
+        ExecSession {
+            handle,
+            input_tx,
+            docker: docker_for_resize,
+            exec_id: exec_id_shared,
+        },
+    ) {
         old_session.handle.abort();
     }
 
@@ -331,7 +344,15 @@ fn exec_resize(
         }
     };
     tauri::async_runtime::spawn(async move {
-        let _ = docker.resize_exec(&exec_id, ResizeExecOptions { width: cols, height: rows }).await;
+        let _ = docker
+            .resize_exec(
+                &exec_id,
+                ResizeExecOptions {
+                    width: cols,
+                    height: rows,
+                },
+            )
+            .await;
     });
     CommandResponse::ok_empty()
 }
@@ -378,15 +399,27 @@ struct CommandResponse<T> {
 
 impl<T> CommandResponse<T> {
     fn ok(data: T) -> Self {
-        Self { success: true, data: Some(data), error: None }
+        Self {
+            success: true,
+            data: Some(data),
+            error: None,
+        }
     }
 
     fn ok_empty() -> Self {
-        Self { success: true, data: None, error: None }
+        Self {
+            success: true,
+            data: None,
+            error: None,
+        }
     }
 
     fn err(msg: impl Into<String>) -> Self {
-        Self { success: false, data: None, error: Some(msg.into()) }
+        Self {
+            success: false,
+            data: None,
+            error: Some(msg.into()),
+        }
     }
 }
 
@@ -495,9 +528,7 @@ async fn container_action(
         "stop" => docker.stop_container(&id, None).await,
         "restart" => docker.restart_container(&id, None).await,
         "remove" => docker.remove_container(&id, None).await,
-        _ => {
-            return Ok(CommandResponse::err("Invalid action"))
-        }
+        _ => return Ok(CommandResponse::err("Invalid action")),
     };
 
     match res {
@@ -550,12 +581,12 @@ async fn list_volumes(
     let path = docker_state.get_path();
     let mut cmd = std::process::Command::new(&docker_bin);
     cmd.env("PATH", docker_lifecycle::enriched_path());
-    
+
     if path != "default" && !path.is_empty() {
-            cmd.arg("-H").arg(format!("unix://{}", path));
+        cmd.arg("-H").arg(format!("unix://{}", path));
     }
 
-    cmd.args(&["system", "df", "-v", "--format", "{{json .Volumes}}"]);
+    cmd.args(["system", "df", "-v", "--format", "{{json .Volumes}}"]);
 
     match cmd.output() {
         Ok(output) => {
@@ -565,13 +596,13 @@ async fn list_volumes(
                 if let Ok(cli_items) = serde_json::from_str::<Vec<serde_json::Value>>(&stdout) {
                     log::info!("Found {} volume usage items via CLI", cli_items.len());
                     for item in cli_items {
-                            let name = item.get("Name")
+                        let name = item
+                            .get("Name")
                             .or_else(|| item.get("name"))
                             .and_then(|v| v.as_str());
 
-                        let usage_data = item.get("UsageData")
-                            .or_else(|| item.get("usageData"));
-                        
+                        let usage_data = item.get("UsageData").or_else(|| item.get("usageData"));
+
                         // Also check for "Size" directly if UsageData is not nested
                         // CLI format might put Size at top level
                         let direct_size = item.get("Size").and_then(|v| v.as_str());
@@ -579,15 +610,18 @@ async fn list_volumes(
                         if let Some(name) = name {
                             if let Some(vol) = volumes.iter_mut().find(|v| v.name == name) {
                                 if let Some(usage_val) = usage_data {
-                                    if let Ok(usage) = serde_json::from_value::<bollard::models::VolumeUsageData>(usage_val.clone()) {
+                                    if let Ok(usage) =
+                                        serde_json::from_value::<bollard::models::VolumeUsageData>(
+                                            usage_val.clone(),
+                                        )
+                                    {
                                         vol.usage_data = Some(usage);
                                     }
                                 } else if let Some(size_str) = direct_size {
                                     let size_bytes = parse_docker_size(size_str);
                                     // Try to get ref count too
-                                    let ref_count = item.get("Links")
-                                        .and_then(|v| v.as_i64())
-                                        .unwrap_or(-1);
+                                    let ref_count =
+                                        item.get("Links").and_then(|v| v.as_i64()).unwrap_or(-1);
 
                                     let usage = bollard::models::VolumeUsageData {
                                         size: size_bytes,
@@ -602,9 +636,12 @@ async fn list_volumes(
                     log::warn!("Failed to parse CLI JSON output: {}", stdout);
                 }
             } else {
-                    log::warn!("CLI command failed: {}", String::from_utf8_lossy(&output.stderr));
+                log::warn!(
+                    "CLI command failed: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
             }
-        },
+        }
         Err(e) => {
             log::warn!("Failed to execute docker CLI: {}", e);
         }
@@ -616,12 +653,15 @@ async fn list_volumes(
 /// Helper to parse Docker's human-readable size strings (e.g. "10MB", "5.5GB", "1024B")
 fn parse_docker_size(s: &str) -> i64 {
     let s = s.trim();
-    if s.is_empty() { return 0; }
+    if s.is_empty() {
+        return 0;
+    }
 
-    let digits: String = s.chars()
-        .take_while(|c| c.is_digit(10) || *c == '.')
+    let digits: String = s
+        .chars()
+        .take_while(|c| c.is_ascii_digit() || *c == '.')
         .collect();
-    
+
     let unit = s[digits.len()..].trim();
     let val: f64 = digits.parse().unwrap_or(0.0);
 
@@ -801,10 +841,7 @@ fn get_settings(app_handle: tauri::AppHandle) -> CommandResponse<AppSettings> {
 }
 
 #[tauri::command]
-fn update_settings(
-    app_handle: tauri::AppHandle,
-    settings: AppSettings,
-) -> CommandResponse<()> {
+fn update_settings(app_handle: tauri::AppHandle, settings: AppSettings) -> CommandResponse<()> {
     match crate::settings::save(&app_handle, &settings) {
         Ok(_) => CommandResponse::ok_empty(),
         Err(e) => CommandResponse::err(e),
@@ -861,7 +898,9 @@ pub fn run() {
             // instead of calling NSApplication terminate (which skips ExitRequested)
             #[cfg(target_os = "macos")]
             {
-                use tauri::menu::{MenuBuilder, SubmenuBuilder, MenuItemBuilder, PredefinedMenuItem};
+                use tauri::menu::{
+                    MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder,
+                };
 
                 let quit_item = MenuItemBuilder::with_id("custom-quit", "Quit Opentainer")
                     .accelerator("CmdOrCtrl+Q")
@@ -879,9 +918,7 @@ pub fn run() {
                     ])
                     .build()?;
 
-                let menu = MenuBuilder::new(app)
-                    .item(&app_submenu)
-                    .build()?;
+                let menu = MenuBuilder::new(app).item(&app_submenu).build()?;
 
                 app.set_menu(menu)?;
 
