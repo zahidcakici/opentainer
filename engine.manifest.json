@@ -1,0 +1,17 @@
+{
+  "_comment": "Intent for the bundled macOS engine (Colima + Lima). Hand-edit this to upgrade — bump a `version`, then run `npm run engine:lock` to regenerate engine.lock.json (resolved URLs + checksums). This file NEVER holds checksums.",
+  "schemaVersion": 1,
+  "arches": ["arm64", "x86_64"],
+  "dependencies": {
+    "colima": {
+      "repo": "abiosoft/colima",
+      "version": "0.10.3",
+      "urlTemplate": "https://github.com/{repo}/releases/download/v{version}/colima-Darwin-{arch}"
+    },
+    "lima": {
+      "repo": "lima-vm/lima",
+      "version": "2.1.3",
+      "urlTemplate": "https://github.com/{repo}/releases/download/v{version}/lima-{version}-Darwin-{arch}.tar.gz"
+    }
+  }
+}

@@ -1,15 +1,23 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useTheme } from '../context/ThemeContext';
-import { Moon, Sun, Monitor } from 'lucide-react';
-import { api } from '../lib/api';
+import { Moon, Sun, Monitor, Container, Box } from 'lucide-react';
+import { api, AppSettings } from '../lib/api';
 
-const Settings = () => {
+interface SettingsProps {
+    onReconfigureEngine?: () => void;
+}
+
+const Settings = ({ onReconfigureEngine }: SettingsProps) => {
     const { theme, setTheme } = useTheme();
     const [version, setVersion] = useState<string>('');
+    const [settings, setSettings] = useState<AppSettings | null>(null);
 
     useEffect(() => {
         api.getAppVersion().then(setVersion).catch(() => setVersion('unknown'));
+        api.getSettings().then((res) => {
+            if (res.success && res.data) setSettings(res.data);
+        }).catch(() => { });
     }, []);
 
     const themes: { id: 'light' | 'dark' | 'system'; label: string; icon: any }[] = [
@@ -17,6 +25,15 @@ const Settings = () => {
         { id: 'dark', label: 'Dark', icon: Moon },
         { id: 'system', label: 'System', icon: Monitor },
     ];
+
+    const sectionHeading: React.CSSProperties = {
+        fontSize: '16px', marginBottom: '12px',
+        borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px',
+    };
+    const panel: React.CSSProperties = {
+        padding: '16px', background: 'var(--bg-panel)', borderRadius: '8px',
+        border: '1px solid var(--border-subtle)',
+    };
 
     return (
         <motion.div
@@ -28,15 +45,8 @@ const Settings = () => {
 
             {/* Appearance Section */}
             <div style={{ marginBottom: '40px' }}>
-                <h2 style={{ fontSize: '16px', marginBottom: '12px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>Appearance</h2>
-                <div style={{
-                    display: 'flex',
-                    gap: '12px',
-                    padding: '16px',
-                    background: 'var(--bg-panel)',
-                    borderRadius: '8px',
-                    border: '1px solid var(--border-subtle)'
-                }}>
+                <h2 style={sectionHeading}>Appearance</h2>
+                <div style={{ ...panel, display: 'flex', gap: '12px' }}>
                     {themes.map((t) => {
                         const Icon = t.icon;
                         const active = theme === t.id;
@@ -67,10 +77,58 @@ const Settings = () => {
                 </div>
             </div>
 
+            {/* Engine Section */}
+            <div style={{ marginBottom: '40px' }}>
+                <h2 style={sectionHeading}>Engine</h2>
+                <div style={panel}>
+                    {settings ? (
+                        <>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    {settings.engine === 'colima'
+                                        ? <Container size={20} color="var(--status-running)" />
+                                        : <Box size={20} color="var(--text-secondary)" />}
+                                    <div>
+                                        <div style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: 500 }}>
+                                            {settings.engine === 'colima' ? 'Colima (managed)' : 'External engine'}
+                                        </div>
+                                        {settings.engine === 'colima' && (
+                                            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
+                                                {settings.colima.cpu} CPU · {settings.colima.memory} GB RAM · {settings.colima.disk} GB disk
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                {onReconfigureEngine && (
+                                    <button
+                                        onClick={onReconfigureEngine}
+                                        style={{
+                                            padding: '8px 14px', fontSize: '13px', fontWeight: 500,
+                                            borderRadius: '6px', border: '1px solid var(--border-subtle)',
+                                            background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer',
+                                            whiteSpace: 'nowrap',
+                                        }}
+                                    >
+                                        Reconfigure
+                                    </button>
+                                )}
+                            </div>
+                            {settings.engine === 'colima' && (
+                                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '12px', marginBottom: 0 }}>
+                                    Resource changes apply the next time Docker starts.
+                                </p>
+                            )}
+                        </>
+                    ) : (
+                        <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>Loading…</p>
+                    )}
+                </div>
+            </div>
+
             {/* About Section */}
             <div style={{ marginBottom: '40px' }}>
-                <h2 style={{ fontSize: '16px', marginBottom: '12px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>About</h2>
-                <div style={{ padding: '16px', background: 'var(--bg-panel)', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                <h2 style={sectionHeading}>About</h2>
+                <div style={panel}>
                     <h3 style={{ fontSize: '15px', marginBottom: '8px' }}>Opentainer</h3>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '13px', lineHeight: '1.5' }}>
                         A minimal, dark-mode first container manager for macOS.
@@ -83,18 +141,6 @@ const Settings = () => {
                     </div>
                 </div>
             </div>
-
-            {/* General Section */}
-            <div>
-                <h2 style={{ fontSize: '16px', marginBottom: '12px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>General</h2>
-                <div style={{ padding: '16px', background: 'var(--bg-panel)', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', cursor: 'pointer' }}>
-                        <input type="checkbox" checked readOnly style={{ accentColor: 'var(--status-running)' }} />
-                        Start at login (Disabled in MVP)
-                    </label>
-                </div>
-            </div>
-
         </motion.div>
     );
 };

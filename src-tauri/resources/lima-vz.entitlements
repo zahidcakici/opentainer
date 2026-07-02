@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Lima's `vz` driver runs the guest VM in-process inside limactl using
+	  Apple's Virtualization.framework, which macOS only permits if the binary
+	  is signed with this entitlement. The upstream Lima release tarball ships
+	  limactl WITHOUT it (Homebrew re-signs at install time), so we sign it
+	  ourselves — see scripts/fetch-engine.sh (dev, ad-hoc) and
+	  .github/workflows/release.yml (release, Developer ID).
+	-->
+	<key>com.apple.security.virtualization</key>
+	<true/>
+</dict>
+</plist>

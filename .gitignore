@@ -16,6 +16,9 @@ dist-ssr
 # Tauri
 src-tauri/target
 
+# Bundled container engine (downloaded + verified by scripts/fetch-engine.sh)
+src-tauri/resources/engine/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

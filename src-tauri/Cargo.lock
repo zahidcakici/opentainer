@@ -2514,7 +2514,7 @@ dependencies = [
 
 [[package]]
 name = "opentainer"
-version = "0.0.3"
+version = "0.1.0"
 dependencies = [
  "bollard",
  "futures-util",

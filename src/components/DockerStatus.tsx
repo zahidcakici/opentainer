@@ -1,9 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Box, Download, AlertTriangle, Loader2, Copy, Check } from 'lucide-react';
-import { api } from '../lib/api';
+import { AlertTriangle, Loader2, Server } from 'lucide-react';
 
-export type DockerState = 'checking' | 'not-installed' | 'starting' | 'stopping' | 'ready' | 'error';
+export type DockerState = 'checking' | 'setup' | 'waiting-external' | 'starting' | 'stopping' | 'ready' | 'error';
 
 interface DockerStatusProps {
     state: DockerState;
@@ -14,7 +13,6 @@ interface DockerStatusProps {
 }
 
 const DockerStatus: React.FC<DockerStatusProps> = ({ state, errorMessage, onRetry, colimaOutput, downloadProgress }) => {
-    const [copied, setCopied] = useState(false);
     const logEndRef = useRef<HTMLDivElement>(null);
 
     // Auto-scroll log to bottom
@@ -23,12 +21,6 @@ const DockerStatus: React.FC<DockerStatusProps> = ({ state, errorMessage, onRetr
             logEndRef.current.scrollIntoView({ behavior: 'smooth' });
         }
     }, [colimaOutput]);
-
-    const handleCopy = () => {
-        navigator.clipboard.writeText('brew install colima docker');
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-    };
 
     if (state === 'ready') {
         return null;
@@ -109,13 +101,6 @@ const DockerStatus: React.FC<DockerStatusProps> = ({ state, errorMessage, onRetr
         color: 'var(--bg-app)',
     };
 
-    const secondaryButtonStyle: React.CSSProperties = {
-        ...buttonStyle,
-        background: 'transparent',
-        color: 'var(--text-secondary)',
-        border: '1px solid var(--border-subtle)',
-    };
-
     const logContainerStyle: React.CSSProperties = {
         width: '100%',
         maxHeight: '120px',
@@ -171,56 +156,19 @@ const DockerStatus: React.FC<DockerStatusProps> = ({ state, errorMessage, onRetr
                         </>
                     )}
 
-                    {state === 'not-installed' && (
+                    {state === 'waiting-external' && (
                         <>
-                            <div style={{ ...iconContainerStyle, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-                                <Box size={32} color="var(--status-error)" />
+                            <div style={iconContainerStyle}>
+                                <Server size={32} color="var(--text-secondary)" />
                             </div>
-                            <h2 style={titleStyle}>Docker Runtime Not Found</h2>
+                            <h2 style={titleStyle}>Waiting for your engine</h2>
                             <p style={descStyle}>
-                                No Docker runtime was detected. Install Colima to enable container management:
+                                Start your Docker engine (OrbStack, Docker Desktop, or Podman).
+                                Opentainer will connect automatically once it's running.
                             </p>
-                            <div style={{
-                                padding: '12px 16px',
-                                background: 'var(--bg-hover)',
-                                borderRadius: '8px',
-                                fontFamily: 'var(--font-mono)',
-                                fontSize: '12px',
-                                color: 'var(--text-primary)',
-                                width: '100%',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: '12px',
-                                userSelect: 'text',
-                                cursor: 'text',
-                                border: '1px solid var(--border-subtle)',
-                            }}>
-                                <code style={{ userSelect: 'text' }}>brew install colima docker</code>
-                                <button
-                                    onClick={handleCopy}
-                                    style={{
-                                        padding: '4px',
-                                        borderRadius: '4px',
-                                        color: copied ? 'var(--status-running)' : 'var(--text-secondary)',
-                                        transition: 'all 0.2s ease',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        background: copied ? 'rgba(16, 185, 129, 0.1)' : 'transparent',
-                                    }}
-                                    title="Copy to clipboard"
-                                >
-                                    {copied ? <Check size={14} /> : <Copy size={14} />}
-                                </button>
-                            </div>
                             <div style={{ display: 'flex', gap: '12px' }}>
-                                <button style={primaryButtonStyle} onClick={() => api.openExternal('https://github.com/abiosoft/colima')}>
-                                    <Download size={16} />
-                                    Learn More
-                                </button>
                                 {onRetry && (
-                                    <button style={secondaryButtonStyle} onClick={onRetry}>
+                                    <button style={primaryButtonStyle} onClick={onRetry}>
                                         Retry
                                     </button>
                                 )}

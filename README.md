@@ -62,13 +62,9 @@ Download the latest release for your platform from the [Releases](https://github
  Opentainer can replace Docker Desktop entirely on macOS. It automatically detects your environment:
  
  1. **Existing Docker**: If you have Docker Desktop, OrbStack, or Podman running, Opentainer connects to it automatically.
- 2. **Standalone**: If no Docker is running, Opentainer checks for **Colima**. If installed, it will automatically start/stop the Docker runtime for you, using minimal resources.
+ 2. **Standalone**: If no Docker is running, Opentainer runs its **own bundled Colima + Lima engine** — no Homebrew, no terminal, no prerequisites. On first launch a short setup wizard lets you pick your engine and resources; the only one-time wait is the Colima VM image download.
  
- To use Standalone mode:
- ```bash
- brew install colima docker
- ```
- Then just launch Opentainer! It will handle the rest.
+ Standalone mode uses Apple's Virtualization framework and requires **macOS 13 (Ventura) or newer**.
 
 ## 🛠️ Development
 
@@ -77,6 +73,7 @@ Download the latest release for your platform from the [Releases](https://github
 - [Node.js](https://nodejs.org/) 24+
 - [Rust](https://www.rust-lang.org/tools/install) 1.90+
 - [Docker](https://www.docker.com/get-started)
+- [`jq`](https://jqlang.github.io/jq/) — only needed to fetch/update the bundled macOS engine (`brew install jq`)
 
 ### Setup
 
@@ -101,6 +98,54 @@ npm run dev
 | `npm run lint` | Run ESLint |
 | `npm run type-check` | Run TypeScript type checking |
 | `npm run test` | Run tests |
+| `npm run engine:fetch` | Download + verify the bundled macOS engine (Colima + Lima) into `src-tauri/resources/engine/` |
+| `npm run engine:lock` | Regenerate `engine.lock.json` (resolved URLs + checksums) from `engine.manifest.json` |
+
+### Bundled container engine (macOS)
+
+On macOS, Opentainer ships its own Colima + Lima engine so a fresh Mac can run
+containers with zero prerequisites. The binaries themselves are **not** committed
+— they're downloaded at build time and pinned across two files (the same
+`manifest` + `lock` split as `package.json` / `package-lock.json`):
+
+- [`engine.manifest.json`](engine.manifest.json) — **intent**, hand-edited: each
+  component's `version` + source URL. This is the only file you edit to upgrade.
+- [`engine.lock.json`](engine.lock.json) — **generated**, never hand-edited:
+  resolved per-arch URLs + SHA256 checksums.
+
+```bash
+# Fetch the engine for your architecture into src-tauri/resources/engine/
+# (verified against engine.lock.json). Needed before `npm run build` on macOS.
+npm run engine:fetch                 # host arch
+npm run engine:fetch -- x86_64       # cross-fetch a specific arch (arm64 | x86_64)
+```
+
+`npm run dev` works **without** fetching: if the bundled engine is absent, the
+backend falls back to a system-installed `colima`/`limactl` (e.g. via Homebrew).
+Fetch the engine when you want to exercise the real bundled setup.
+
+**Upgrading the pinned engine** — bump the version, then relock:
+
+```bash
+# 1. edit engine.manifest.json  ->  bump colima/lima "version"   (only manual step)
+# 2. regenerate checksums from the real artifacts:
+npm run engine:lock
+# 3. pull the new binaries, then commit engine.manifest.json + engine.lock.json:
+npm run engine:fetch
+```
+
+`engine:lock` downloads each artifact for every arch, hashes the actual bytes,
+and rewrites `engine.lock.json` — you never compute or paste a checksum. Review
+the diff (ideally cross-check against the upstream projects' published release
+checksums) before committing. `npm run engine:lock -- --check` verifies (offline)
+that the lock is in sync with the manifest; CI runs it to block a stale lock. The
+`engine:fetch` step and the release build also refuse to run against a stale lock.
+
+> Lima's `vz` driver runs the guest VM in-process, so `limactl` must be signed
+> with the `com.apple.security.virtualization` entitlement
+> ([`src-tauri/resources/lima-vz.entitlements`](src-tauri/resources/lima-vz.entitlements)).
+> `engine:fetch` ad-hoc-signs it for local dev; the release pipeline re-signs it
+> with the Developer ID before notarization.
 
 ### Project Structure
 

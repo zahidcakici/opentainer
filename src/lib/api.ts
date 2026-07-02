@@ -10,6 +10,24 @@ export interface DockerStatusResponse {
     error?: string;
 }
 
+// Engine the user chose during onboarding. Mirrors the Rust `EngineKind` enum
+// (serialized lowercase).
+export type EngineKind = 'colima' | 'external';
+
+// Colima VM resource profile. Mirrors the Rust `ColimaResources` struct.
+export interface ColimaResources {
+    cpu: number;
+    memory: number; // GB
+    disk: number; // GB
+}
+
+// Persisted app settings. Mirrors the Rust `AppSettings` struct.
+export interface AppSettings {
+    setup_completed: boolean;
+    engine: EngineKind;
+    colima: ColimaResources;
+}
+
 export interface AppApi {
     listContainers: () => Promise<{ success: boolean; data?: any[]; error?: string }>;
     containerAction: (id: string, action: string) => Promise<{ success: boolean; error?: string }>;
@@ -40,6 +58,10 @@ export interface AppApi {
     startDocker: () => Promise<{ success: boolean; error?: string }>;
     waitForDocker: (timeoutSecs: number) => Promise<{ success: boolean; error?: string }>;
     getInstallInstructions: () => Promise<{ success: boolean; data?: string; error?: string }>;
+    // Settings + engine wizard
+    getSettings: () => Promise<{ success: boolean; data?: AppSettings; error?: string }>;
+    updateSettings: (settings: AppSettings) => Promise<{ success: boolean; error?: string }>;
+    getRecommendedResources: () => Promise<{ success: boolean; data?: ColimaResources; error?: string }>;
 }
 
 export const api: AppApi = {
@@ -186,4 +208,8 @@ export const api: AppApi = {
     startDocker: async () => invoke("start_docker"),
     waitForDocker: async (timeoutSecs: number) => invoke("wait_for_docker", { timeoutSecs }),
     getInstallInstructions: async () => invoke("get_install_instructions"),
+    // Settings + engine wizard
+    getSettings: async () => invoke("get_settings"),
+    updateSettings: async (settings: AppSettings) => invoke("update_settings", { settings }),
+    getRecommendedResources: async () => invoke("get_recommended_resources"),
 };

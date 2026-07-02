@@ -7,7 +7,8 @@ import VolumeList from './components/VolumeList';
 import NetworkList from './components/NetworkList';
 import Settings from './components/Settings';
 import DockerStatus, { DockerState } from './components/DockerStatus';
-import { api } from './lib/api';
+import EngineWizard from './components/EngineWizard';
+import { api, AppSettings, EngineKind } from './lib/api';
 
 // Increased timeout for first-run Colima (may download VM image)
 const DOCKER_TIMEOUT_SECONDS = 300;
@@ -29,71 +30,104 @@ const App: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
   const [colimaOutput, setColimaOutput] = useState<string[]>([]);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
   const colimaUnlisten = useRef<(() => void) | null>(null);
+
+  // Start (and wait for) the bundled Colima engine, streaming progress to the UI.
+  const startColima = useCallback(async () => {
+    setColimaOutput([]);
+    setDownloadProgress(null);
+    setErrorMessage(undefined);
+
+    // Subscribe to colima progress before starting.
+    if (colimaUnlisten.current) {
+      colimaUnlisten.current();
+      colimaUnlisten.current = null;
+    }
+    colimaUnlisten.current = await listen<ColimaProgressEvent>('colima-output', (event) => {
+      const progress = event.payload;
+      if (progress.message) {
+        setColimaOutput(prev => {
+          const next = [...prev, progress.message];
+          return next.length > MAX_LOG_LINES ? next.slice(-MAX_LOG_LINES) : next;
+        });
+      }
+      if (progress.percent !== null && progress.percent !== undefined) {
+        setDownloadProgress(progress.percent);
+      }
+    });
+
+    setDockerState('starting');
+    const startResult = await api.startDocker();
+    if (!startResult.success) {
+      setDockerState('error');
+      setErrorMessage(startResult.error || 'Failed to start Docker');
+      return;
+    }
+
+    const waitResult = await api.waitForDocker(DOCKER_TIMEOUT_SECONDS);
+    if (!waitResult.success) {
+      setDockerState('error');
+      setErrorMessage(waitResult.error || 'Docker did not start in time');
+      return;
+    }
+
+    setDockerState('ready');
+  }, []);
 
   const checkAndStartDocker = useCallback(async () => {
     setDockerState('checking');
     setErrorMessage(undefined);
-    setColimaOutput([]);
-    setDownloadProgress(null);
 
     try {
-      // Check if Docker is RUNNING first (supports any provider: Orbstack, Podman, Docker Desktop, etc.)
+      // Check if Docker is RUNNING first (any provider: Orbstack, Podman, Docker Desktop, Colima…)
       const runningResult = await api.checkDockerRunning();
       if (runningResult.success && runningResult.data) {
-        // Docker is already running - use it without managing it
         setDockerState('ready');
         return;
       }
 
-      // Docker is not running - check if Colima is installed (on macOS)
-      const colimaResult = await api.checkColimaInstalled();
-      if (!colimaResult.success || !colimaResult.data) {
-        setDockerState('not-installed');
+      // Not running — decide what to do based on the user's persisted choice.
+      const settingsResult = await api.getSettings();
+      const s = settingsResult.data ?? null;
+      setSettings(s);
+
+      if (!s || !s.setup_completed) {
+        // First run (or never finished onboarding): show the engine wizard.
+        setDockerState('setup');
         return;
       }
 
-      // Set up listener for colima output BEFORE starting
-      const unlisten = await listen<ColimaProgressEvent>('colima-output', (event) => {
-        const progress = event.payload;
-
-        // Add the message to the log (keep last N lines)
-        if (progress.message) {
-          setColimaOutput(prev => {
-            const next = [...prev, progress.message];
-            return next.length > MAX_LOG_LINES ? next.slice(-MAX_LOG_LINES) : next;
-          });
-        }
-
-        // Update download progress if available
-        if (progress.percent !== null && progress.percent !== undefined) {
-          setDownloadProgress(progress.percent);
-        }
-      });
-      colimaUnlisten.current = unlisten;
-
-      // Colima is installed but Docker not running - start it
-      setDockerState('starting');
-      const startResult = await api.startDocker();
-      if (!startResult.success) {
-        setDockerState('error');
-        setErrorMessage(startResult.error || 'Failed to start Docker');
+      if (s.engine === 'external') {
+        // User manages their own engine; wait for them to start it.
+        setDockerState('waiting-external');
         return;
       }
 
-      // Wait for Docker to be ready
-      const waitResult = await api.waitForDocker(DOCKER_TIMEOUT_SECONDS);
-      if (!waitResult.success) {
-        setDockerState('error');
-        setErrorMessage(waitResult.error || 'Docker did not start in time');
-        return;
-      }
-
-      setDockerState('ready');
+      // Colima is our managed engine — start it.
+      await startColima();
     } catch (error: any) {
       setDockerState('error');
       setErrorMessage(error.toString());
     }
+  }, [startColima]);
+
+  // Called by the wizard after it persists the user's choice.
+  const handleWizardComplete = useCallback(async (engine: EngineKind) => {
+    const s = await api.getSettings();
+    setSettings(s.data ?? null);
+    if (engine === 'colima') {
+      await startColima();
+    } else {
+      setDockerState('waiting-external');
+    }
+  }, [startColima]);
+
+  // Re-open the wizard from Settings (prefilled with current values).
+  const handleReconfigureEngine = useCallback(async () => {
+    const s = await api.getSettings();
+    setSettings(s.data ?? null);
+    setDockerState('setup');
   }, []);
 
   useEffect(() => {
@@ -118,6 +152,11 @@ const App: React.FC = () => {
     };
   }, [checkAndStartDocker]);
 
+  // Engine onboarding / reconfiguration screen
+  if (dockerState === 'setup') {
+    return <EngineWizard onComplete={handleWizardComplete} initial={settings} />;
+  }
+
   // Show Docker status screen while not ready
   if (dockerState !== 'ready') {
     return (
@@ -137,10 +176,9 @@ const App: React.FC = () => {
       {activeTab === 'images' && <ImageList />}
       {activeTab === 'volumes' && <VolumeList />}
       {activeTab === 'networks' && <NetworkList />}
-      {activeTab === 'settings' && <Settings />}
+      {activeTab === 'settings' && <Settings onReconfigureEngine={handleReconfigureEngine} />}
     </Layout>
   );
 }
 
 export default App;
-

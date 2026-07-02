@@ -16,8 +16,10 @@ jobs:
         include:
           - platform: macos-latest
             args: '--target aarch64-apple-darwin'
+            engine_arch: arm64
           - platform: macos-latest
             args: '--target x86_64-apple-darwin'
+            engine_arch: x86_64
           - platform: ubuntu-22.04
             args: ''
           - platform: windows-latest
@@ -74,12 +76,73 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      # The Colima + Lima engine is bundled into the macOS app (bundle.resources).
+      # Fail fast if engine.lock.json is stale vs. engine.manifest.json, then
+      # download + SHA256-verify the engine for this job's architecture.
+      - name: Check engine lock is in sync (macOS)
+        if: matrix.platform == 'macos-latest'
+        run: bash scripts/lock-engine.sh --check
+        shell: bash
+
+      - name: Fetch container engine (macOS)
+        if: matrix.platform == 'macos-latest'
+        run: bash scripts/fetch-engine.sh ${{ matrix.engine_arch }}
+        shell: bash
+
+      # Tauri does NOT sign binaries placed in bundle.resources, so we import the
+      # Developer ID cert into a keychain and codesign the nested Mach-O engine
+      # binaries (with hardened runtime) ourselves — otherwise notarization fails.
+      # tauri-action then reuses this keychain (we omit APPLE_CERTIFICATE below so
+      # it doesn't create a second one and trigger an ambiguous-identity error).
+      - name: Import signing certificate (macOS)
+        if: matrix.platform == 'macos-latest'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/opentainer-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH" -T /usr/bin/codesign
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed s/\"//g)
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          rm -f "$RUNNER_TEMP/cert.p12"
+        shell: bash
+
+      - name: Sign bundled engine binaries (macOS)
+        if: matrix.platform == 'macos-latest'
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          ENTITLEMENTS="src-tauri/resources/lima-vz.entitlements"
+          find src-tauri/resources/engine -type f | while read -r f; do
+            if file "$f" | grep -q "Mach-O"; then
+              # limactl runs the VM in-process via Virtualization.framework, so it
+              # must be signed with the com.apple.security.virtualization
+              # entitlement (otherwise `colima start --vm-type vz` fails with
+              # VZErrorDomain Code=2). colima and any other Mach-O don't need it.
+              if [ "$(basename "$f")" = "limactl" ]; then
+                echo "Signing (vz entitlement) $f"
+                codesign --force --options runtime --timestamp \
+                  --entitlements "$ENTITLEMENTS" \
+                  --sign "$APPLE_SIGNING_IDENTITY" "$f"
+              else
+                echo "Signing $f"
+                codesign --force --options runtime --timestamp \
+                  --sign "$APPLE_SIGNING_IDENTITY" "$f"
+              fi
+            fi
+          done
+        shell: bash
+
       - name: Build and Release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APPLE_CERTIFICATE: ${{ matrix.platform == 'macos-latest' && secrets.APPLE_CERTIFICATE || '' }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ matrix.platform == 'macos-latest' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
           APPLE_SIGNING_IDENTITY: ${{ matrix.platform == 'macos-latest' && secrets.APPLE_SIGNING_IDENTITY || '' }}
           APPLE_ID: ${{ matrix.platform == 'macos-latest' && secrets.APPLE_ID || '' }}
           APPLE_PASSWORD: ${{ matrix.platform == 'macos-latest' && secrets.APPLE_PASSWORD || '' }}

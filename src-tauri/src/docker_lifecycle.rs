@@ -1,5 +1,7 @@
 use tokio::process::Command;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::time::sleep;
 use tauri::Emitter;
@@ -14,37 +16,123 @@ const EXTRA_BIN_DIRS: &[&str] = &[
     "/usr/bin",
 ];
 
-/// Build a PATH string that prepends well-known Homebrew directories to the
-/// current PATH.  This ensures that child processes (and *their* children,
-/// e.g. limactl spawned by colima) can find all required binaries.
-pub fn enriched_path() -> String {
-    let current = std::env::var("PATH").unwrap_or_default();
+/// Directory (`<resources>/engine/bin`) of the Colima + Lima engine we bundle
+/// inside the macOS .app. Set once at startup by [`init_bundled_engine`].
+/// `None` means no bundle was found (e.g. `npm run dev`), so we fall back to a
+/// system install.
+static BUNDLED_ENGINE_BIN: OnceLock<Option<PathBuf>> = OnceLock::new();
 
+/// Names of the engine binaries we bundle and therefore resolve to the bundle first.
+const BUNDLED_BINARIES: &[&str] = &["colima", "limactl"];
+
+fn bundled_engine_bin() -> Option<&'static PathBuf> {
+    BUNDLED_ENGINE_BIN.get().and_then(|o| o.as_ref())
+}
+
+/// Locate the bundled engine inside the app's resources and ensure its binaries
+/// are executable. Safe to call once during app setup; subsequent calls are no-ops.
+pub fn init_bundled_engine(app: &tauri::AppHandle) {
     #[cfg(target_os = "macos")]
     {
-        // Collect dirs that aren't already in current PATH
-        let mut extra: Vec<&str> = Vec::new();
-        for dir in EXTRA_BIN_DIRS {
-            if !current.split(':').any(|p| p == *dir) {
-                extra.push(dir);
+        use tauri::Manager;
+
+        let resolved = match app.path().resource_dir() {
+            Ok(dir) => {
+                let bin_dir = dir.join("engine").join("bin");
+                if bin_dir.join("colima").exists() && bin_dir.join("limactl").exists() {
+                    ensure_executable(&bin_dir);
+                    log::info!("Using bundled engine at {}", bin_dir.display());
+                    Some(bin_dir)
+                } else {
+                    log::info!(
+                        "No bundled engine at {} — falling back to a system install",
+                        bin_dir.display()
+                    );
+                    None
+                }
             }
-        }
-        if extra.is_empty() {
-            return current;
-        }
-        // Prepend so they take priority
-        format!("{}:{}", extra.join(":"), current)
+            Err(e) => {
+                log::warn!("Could not resolve resource dir for bundled engine: {e}");
+                None
+            }
+        };
+        let _ = BUNDLED_ENGINE_BIN.set(resolved);
     }
 
     #[cfg(not(target_os = "macos"))]
     {
-        current
+        let _ = app;
+        let _ = BUNDLED_ENGINE_BIN.set(None);
     }
 }
 
-/// Look up a binary by name, checking well-known directories first and falling
-/// back to `which`.  Returns the full path (e.g. `/opt/homebrew/bin/colima`).
+/// Make sure the bundled `colima`/`limactl` carry the executable bit — Tauri's
+/// resource copying can drop it.
+#[cfg(target_os = "macos")]
+fn ensure_executable(bin_dir: &std::path::Path) {
+    use std::os::unix::fs::PermissionsExt;
+    for name in BUNDLED_BINARIES {
+        let path = bin_dir.join(name);
+        if let Ok(meta) = std::fs::metadata(&path) {
+            let mut perm = meta.permissions();
+            if perm.mode() & 0o111 == 0 {
+                perm.set_mode(0o755);
+                let _ = std::fs::set_permissions(&path, perm);
+            }
+        }
+    }
+}
+
+/// Build a PATH string that prepends the bundled engine dir and the well-known
+/// Homebrew directories to the current PATH. This ensures child processes (and
+/// *their* children, e.g. limactl spawned by colima) resolve to the bundled
+/// binaries first, then any system install.
+pub fn enriched_path() -> String {
+    let current = std::env::var("PATH").unwrap_or_default();
+
+    // Highest priority: the engine we bundle. Then well-known install dirs.
+    let mut prefixes: Vec<String> = Vec::new();
+    if let Some(dir) = bundled_engine_bin() {
+        prefixes.push(dir.to_string_lossy().into_owned());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        for dir in EXTRA_BIN_DIRS {
+            prefixes.push((*dir).to_string());
+        }
+    }
+
+    // Keep only dirs not already present (in PATH or earlier in the list).
+    let mut extra: Vec<String> = Vec::new();
+    for p in prefixes {
+        if !current.split(':').any(|c| c == p) && !extra.iter().any(|e| e == &p) {
+            extra.push(p);
+        }
+    }
+
+    if extra.is_empty() {
+        current
+    } else if current.is_empty() {
+        extra.join(":")
+    } else {
+        format!("{}:{}", extra.join(":"), current)
+    }
+}
+
+/// Look up a binary by name. Prefers the bundled engine for `colima`/`limactl`,
+/// then well-known directories, then `which`. Returns the full path
+/// (e.g. `/opt/homebrew/bin/colima`).
 pub fn find_binary(name: &str) -> Option<String> {
+    // Prefer the engine we ship inside the app.
+    if BUNDLED_BINARIES.contains(&name) {
+        if let Some(dir) = bundled_engine_bin() {
+            let path = dir.join(name);
+            if path.exists() {
+                return Some(path.to_string_lossy().into_owned());
+            }
+        }
+    }
+
     #[cfg(target_os = "macos")]
     {
         for dir in EXTRA_BIN_DIRS {
@@ -100,6 +188,52 @@ pub struct DockerStatus {
     pub colima_installed: bool,
     pub we_started: bool,
     pub error: Option<String>,
+}
+
+/// VM resources for the Colima runtime (CPUs, memory in GB, disk in GB).
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+pub struct ColimaResources {
+    pub cpu: u32,
+    pub memory: u32,
+    pub disk: u32,
+}
+
+impl Default for ColimaResources {
+    fn default() -> Self {
+        recommended_resources()
+    }
+}
+
+/// Host physical memory in GB, if it can be determined.
+#[cfg(target_os = "macos")]
+fn host_memory_gb() -> Option<u32> {
+    let out = std::process::Command::new("sysctl")
+        .args(["-n", "hw.memsize"])
+        .output()
+        .ok()?;
+    let bytes: u64 = String::from_utf8_lossy(&out.stdout).trim().parse().ok()?;
+    Some((bytes / 1024 / 1024 / 1024) as u32)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn host_memory_gb() -> Option<u32> {
+    None
+}
+
+/// Recommended Colima resources, auto-scaled to the host machine. Used both as
+/// the backend default and as the pre-filled values in the setup wizard, so the
+/// two never drift.
+pub fn recommended_resources() -> ColimaResources {
+    let cores = std::thread::available_parallelism()
+        .map(|n| n.get() as u32)
+        .unwrap_or(4);
+    let cpu = (cores / 2).clamp(2, 8);
+
+    let memory = host_memory_gb()
+        .map(|gb| (gb / 4).clamp(4, 8))
+        .unwrap_or(4);
+
+    ColimaResources { cpu, memory, disk: 60 }
 }
 
 /// Structured progress info emitted to the frontend
@@ -247,7 +381,10 @@ pub async fn check_colima_installed() -> bool {
 /// Start Docker runtime (Colima on macOS, systemd on Linux)
 /// When an app_handle is provided, emits 'colima-output' events with real-time
 /// progress so the UI can display download status on first run.
-pub async fn start_docker_runtime(app_handle: Option<tauri::AppHandle>) -> Result<(), String> {
+pub async fn start_docker_runtime(
+    app_handle: Option<tauri::AppHandle>,
+    resources: Option<ColimaResources>,
+) -> Result<(), String> {
     // Prevent concurrent starts
     if START_IN_PROGRESS
         .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -286,11 +423,26 @@ pub async fn start_docker_runtime(app_handle: Option<tauri::AppHandle>) -> Resul
         // On first run this downloads a ~300-800MB VM disk image and can take minutes.
         use std::process::Stdio;
 
+        // VM resources (auto-scaled defaults if the caller didn't supply any).
+        let res = resources.unwrap_or_default();
+        let cpu = res.cpu.to_string();
+        let memory = res.memory.to_string();
+        let disk = res.disk.to_string();
+
         let child = colima_command().map_err(|e| {
             START_IN_PROGRESS.store(false, Ordering::SeqCst);
             e
         })?
-            .args(["start", "--cpu", "2", "--memory", "4", "--disk", "60"])
+            // `--vm-type vz` uses Apple's Virtualization.framework so we don't
+            // need to bundle QEMU; `virtiofs` is the matching mount type.
+            .args([
+                "start",
+                "--cpu", &cpu,
+                "--memory", &memory,
+                "--disk", &disk,
+                "--vm-type", "vz",
+                "--mount-type", "virtiofs",
+            ])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -520,5 +672,22 @@ mod tests {
     async fn test_check_colima_installed() {
         let installed = check_colima_installed().await;
         println!("Colima installed: {}", installed);
+    }
+
+    #[test]
+    fn recommended_resources_within_bounds() {
+        let r = recommended_resources();
+        assert!((2..=8).contains(&r.cpu), "cpu {} out of range", r.cpu);
+        assert!((4..=8).contains(&r.memory), "memory {} out of range", r.memory);
+        assert_eq!(r.disk, 60);
+    }
+
+    #[test]
+    fn colima_resources_default_matches_recommended() {
+        let d = ColimaResources::default();
+        let r = recommended_resources();
+        assert_eq!(d.cpu, r.cpu);
+        assert_eq!(d.memory, r.memory);
+        assert_eq!(d.disk, r.disk);
     }
 }

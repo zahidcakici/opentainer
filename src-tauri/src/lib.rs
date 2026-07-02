@@ -1,4 +1,7 @@
 mod docker_lifecycle;
+mod settings;
+
+use settings::AppSettings;
 
 use bollard::exec::{CreateExecOptions, StartExecResults};
 use bollard::models::ContainerStatsResponse;
@@ -532,10 +535,19 @@ async fn list_volumes(
         Err(e) => return Ok(CommandResponse::err(e.to_string())),
     };
 
-    // Use CLI directly for usage data as API is unreliable for this specific data
+    // Enrich with usage data via the docker CLI (`system df` is more reliable
+    // than the API here). The CLI is optional — a fresh machine running only our
+    // bundled Colima has no `docker` binary — so degrade gracefully to the
+    // Bollard list (without sizes) instead of erroring.
+    let docker_bin = match docker_lifecycle::find_binary("docker") {
+        Some(bin) => bin,
+        None => {
+            log::info!("docker CLI not found; returning volumes without usage data");
+            return Ok(CommandResponse::ok(volumes));
+        }
+    };
     log::info!("Fetching volume usage data via CLI");
     let path = docker_state.get_path();
-    let docker_bin = docker_lifecycle::find_binary("docker").unwrap_or_else(|| "docker".to_string());
     let mut cmd = std::process::Command::new(&docker_bin);
     cmd.env("PATH", docker_lifecycle::enriched_path());
     
@@ -775,10 +787,33 @@ async fn get_docker_status() -> Result<CommandResponse<docker_lifecycle::DockerS
 
 #[tauri::command]
 async fn start_docker(app_handle: tauri::AppHandle) -> Result<CommandResponse<()>, String> {
-    match docker_lifecycle::start_docker_runtime(Some(app_handle)).await {
+    // Use the persisted resource profile (auto-scaled defaults on first run).
+    let resources = settings::load(&app_handle).colima;
+    match docker_lifecycle::start_docker_runtime(Some(app_handle), Some(resources)).await {
         Ok(_) => Ok(CommandResponse::ok_empty()),
         Err(e) => Ok(CommandResponse::err(e)),
     }
+}
+
+#[tauri::command]
+fn get_settings(app_handle: tauri::AppHandle) -> CommandResponse<AppSettings> {
+    CommandResponse::ok(settings::load(&app_handle))
+}
+
+#[tauri::command]
+fn update_settings(
+    app_handle: tauri::AppHandle,
+    settings: AppSettings,
+) -> CommandResponse<()> {
+    match crate::settings::save(&app_handle, &settings) {
+        Ok(_) => CommandResponse::ok_empty(),
+        Err(e) => CommandResponse::err(e),
+    }
+}
+
+#[tauri::command]
+fn get_recommended_resources() -> CommandResponse<docker_lifecycle::ColimaResources> {
+    CommandResponse::ok(docker_lifecycle::recommended_resources())
 }
 
 #[tauri::command]
@@ -810,6 +845,10 @@ pub fn run() {
         .manage(PullState(Mutex::new(HashMap::new())))
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            // Resolve the bundled Colima/Lima engine before anything tries to
+            // start Docker, so all engine commands route to it.
+            docker_lifecycle::init_bundled_engine(app.handle());
+
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
@@ -898,7 +937,10 @@ pub fn run() {
             start_docker,
             wait_for_docker,
             get_install_instructions,
-            did_we_start_docker
+            did_we_start_docker,
+            get_settings,
+            update_settings,
+            get_recommended_resources
         ])
         .on_window_event(|window, event| {
             // Handle window close request (red X button OR custom Cmd+Q) - stop Docker if we started it
