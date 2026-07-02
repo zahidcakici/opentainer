@@ -241,7 +241,8 @@ pub fn recommended_resources() -> ColimaResources {
     }
 }
 
-/// Structured progress info emitted to the frontend
+/// Structured progress info emitted to the frontend (macOS/Colima only).
+#[cfg(target_os = "macos")]
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ColimaProgress {
     /// The raw output line from colima
@@ -260,6 +261,7 @@ pub struct ColimaProgress {
 /// Colima uses QEMU/Lima which outputs lines like:
 ///   "downloading ... 45.2% 5.2 MiB/s ETA 2m30s"
 ///   or progress bars with percentage info
+#[cfg(target_os = "macos")]
 fn parse_colima_progress(line: &str) -> ColimaProgress {
     let trimmed = line.trim();
 
@@ -414,6 +416,11 @@ pub async fn start_docker_runtime(
         return Ok(());
     }
 
+    // app_handle (progress stream) and resources (VM sizing) drive the macOS
+    // Colima path only; the Linux/Windows branches don't use them.
+    #[cfg(not(target_os = "macos"))]
+    let _ = (&app_handle, &resources);
+
     #[cfg(target_os = "macos")]
     {
         // First check if already running
@@ -515,6 +522,7 @@ pub async fn start_docker_runtime(
 }
 
 /// Read stdout/stderr from the colima child process and emit events to the frontend
+#[cfg(target_os = "macos")]
 async fn stream_colima_output(mut child: tokio::process::Child, app_handle: tauri::AppHandle) {
     use tokio::io::{AsyncBufReadExt, BufReader};
 
