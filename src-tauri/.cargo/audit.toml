@@ -1,0 +1,20 @@
+# cargo-audit configuration (https://docs.rs/cargo-audit)
+#
+# Scoped ignores for advisories we cannot currently fix because the vulnerable
+# crate is pulled in transitively by Tauri and no patched version is reachable
+# through its dependency graph yet. Each entry documents why it is safe to defer
+# and must be removed as soon as an upstream fix lands.
+
+[advisories]
+ignore = [
+    # quick-xml <0.41.0 (via plist <- tauri): two DoS advisories — unbounded
+    # namespace-declaration allocation (RUSTSEC-2026-0195) and quadratic
+    # duplicate-attribute checking (RUSTSEC-2026-0194). Reachable only through
+    # `plist`, which parses the app's OWN macOS Info.plist (trusted, local input),
+    # not attacker-controlled XML — so the practical DoS exposure is nil. The fix
+    # is quick-xml >=0.41.0, but the latest plist (1.9.0) still caps it at 0.39.x
+    # and Tauri 2.9.5 depends on `plist = "^1"`. Remove these once Tauri/plist
+    # ship a plist release that pulls quick-xml >=0.41.0.
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
+]
