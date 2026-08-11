@@ -1,3 +1,5 @@
+
+
 <div align="center">
 
 <img src="public/icon-256.png" alt="Opentainer Logo" width="128" height="128">
@@ -71,7 +73,7 @@ Download the latest release for your platform from the [Releases](https://github
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) 24+
-- [Rust](https://www.rust-lang.org/tools/install) 1.90+
+- [Rust](https://www.rust-lang.org/tools/install) 1.92+
 - [Docker](https://www.docker.com/get-started)
 - [`jq`](https://jqlang.github.io/jq/) — only needed to fetch/update the bundled macOS engine (`brew install jq`)
 
