@@ -122,11 +122,15 @@ chmod 0755 "$BIN_DIR/limactl"
 # Trim weight we don't need at runtime. We run the VZ backend (built into
 # limactl), so the external krunkit driver and the MCP helper are dead weight.
 # Colima drives limactl directly, so the docs/man pages aren't needed either.
+# Colima only runs Linux guests, so drop the macOS-guest agents: they are
+# unsigned Mach-O binaries inside .gz files, which notarization unpacks and
+# rejects ("not signed with a valid Developer ID certificate").
 rm -rf \
   "$ENGINE_DIR/share/doc" \
   "$ENGINE_DIR/share/man" \
   "$ENGINE_DIR/libexec/lima/lima-driver-krunkit" \
-  "$ENGINE_DIR/libexec/lima/limactl-mcp"
+  "$ENGINE_DIR/libexec/lima/limactl-mcp" \
+  "$ENGINE_DIR"/share/lima/lima-guestagent.Darwin-*
 
 # The Lima `vz` driver runs the VM in-process inside limactl, which macOS only
 # permits if the binary carries the com.apple.security.virtualization
