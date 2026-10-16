@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 use std::time::Duration;
+#[cfg(target_os = "macos")]
 use tauri::Emitter;
 use tokio::process::Command;
 use tokio::time::sleep;
