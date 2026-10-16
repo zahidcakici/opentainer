@@ -139,11 +139,11 @@ jobs:
           done
         shell: bash
 
-      # Updater artifacts (.app.tar.gz / AppImage / installer + .sig) and the
-      # merged latest.json are only produced here, signed with the updater key,
-      # so local `tauri build` keeps working without TAURI_SIGNING_PRIVATE_KEY.
-      # The in-app updater reads releases/latest/download/latest.json, so
-      # updates only reach users once this draft release is published.
+      # Updater artifacts (.app.tar.gz / AppImage / installer + .sig) are only
+      # produced here, signed with the updater key, so local `tauri build`
+      # keeps working without TAURI_SIGNING_PRIVATE_KEY. latest.json is NOT
+      # written per job (parallel jobs race and drop platforms); the
+      # updater-manifest job below builds it once all platforms are uploaded.
       - name: Build and Release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -178,5 +178,25 @@ jobs:
             - **Linux**: Download `.AppImage` (make executable) or `.deb` (install with dpkg)
           releaseDraft: true
           prerelease: false
-          updaterJsonPreferNsis: true
+          includeUpdaterJson: false
           args: ${{ matrix.args }} --config '{"bundle":{"createUpdaterArtifacts":true}}'
+
+  # Runs once every platform has uploaded its signed bundle, so latest.json
+  # lists them all. The in-app updater reads
+  # releases/latest/download/latest.json, so updates only reach users once
+  # this draft release is published.
+  updater-manifest:
+    name: Updater manifest (latest.json)
+    needs: publish-tauri
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and upload latest.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/updater-manifest.sh "app-v${GITHUB_REF_NAME#v}"
+        shell: bash
