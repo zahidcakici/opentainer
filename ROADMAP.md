@@ -4,11 +4,12 @@ A milestone-based plan for upcoming features. Each item is sized to be picked up
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
-Current baseline (v0.0.3):
-- Tauri 2.9, single window `main`, identifier `com.opentainer.app`.
-- Release pipeline (`.github/workflows/release.yml`) builds all platforms, signs + notarizes macOS, publishes draft GitHub Releases. **No updater artifacts yet.**
+Current baseline (v0.1.0):
+- Tauri 2.12, single window `main`, identifier `com.opentainer.app`.
+- Bundled Colima 0.10.3 + Lima 2.2.1 engine with first-run engine wizard (Milestone 5).
+- Release pipeline (`.github/workflows/release.yml`) builds all platforms, signs + notarizes macOS, publishes draft GitHub Releases with signed updater artifacts + `latest.json`.
 - App quits on window close (`CloseRequested` in `src-tauri/src/lib.rs` stops Colima if we started it).
-- Capabilities: only `src-tauri/capabilities/default.json`.
+- Capabilities: only `src-tauri/capabilities/default.json` (the updater is driven from Rust, so it needs no webview permission).
 
 ---
 
@@ -16,7 +17,9 @@ Current baseline (v0.0.3):
 
 Goal: users can check for, download, and install updates without manually re-downloading from GitHub.
 
-### 1a. Updater foundation `[ ]`
+### 1a. Updater foundation `[~]`
+> Done: `tauri-plugin-updater` wired in Rust (`src-tauri/src/updater.rs`), `plugins.updater` config, release pipeline emits signed updater artifacts + `latest.json`. **Remaining:** generate the signing keypair, replace the `REPLACE_WITH_UPDATER_PUBLIC_KEY` placeholder in `tauri.conf.json`, add the two GitHub secrets.
+> Deviation: no JS `plugin-updater`/`plugin-process` packages and no `updater:default` capability — the plugin is driven from Rust via our own commands and relaunch uses `AppHandle::restart()`.
 - Add `tauri-plugin-updater` (Rust) + `@tauri-apps/plugin-updater` and `@tauri-apps/plugin-process` (JS).
 - Generate an updater signing keypair (`npm run tauri signer generate`). Store the **private key + password as GitHub secrets** (`TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`); commit the **public key** into `tauri.conf.json`.
 - Add `plugins.updater` block to `src-tauri/tauri.conf.json`:
@@ -24,14 +27,16 @@ Goal: users can check for, download, and install updates without manually re-dow
   - `"windows": { "installMode": "passive" }`.
 - Add `updater:default` permission to a capability file.
 - **Release pipeline changes** (`release.yml`): set `createUpdaterArtifacts: true` (or `tauri.bundle.createUpdaterArtifacts`), inject the two signing-key env vars, and let `tauri-action` emit `latest.json` + `.sig` files into the release. Verify the macOS universal vs per-arch targets each get signatures.
-- ⚠️ Updater requires the app to be **signed** — macOS is covered; confirm Windows artifacts are signed or the updater will refuse them.
+- ⚠️ The updater verifies its own minisign signature (`.sig`), independent of OS code signing. Unsigned Windows installers still update fine but may trigger SmartScreen when run.
 
-### 1b. Manual "Check for updates" `[ ]`
+### 1b. Manual "Check for updates" `[x]`
+> `check_for_update` / `install_update` commands, `useUpdater` hook, Updates panel in `Settings.tsx` with notes + download progress (`update-progress` event). Colima is stopped (if we started it) before relaunch.
 - Backend command `check_for_update` (in `lib.rs` or a new `updater.rs` module) wrapping the updater plugin; expose via `AppApi` in `src/lib/api.ts` and register in `generate_handler!`.
 - UI entry point in `Settings.tsx`: "Check for updates" button → shows current version (already have `get_app_version`), available version, release notes, and a Download/Install button.
 - On install: download with progress events (reuse the existing event-streaming pattern like `pull_image`), then `relaunch()` from `plugin-process`.
 
-### 1c. Background / automatic update checks `[ ]`
+### 1c. Background / automatic update checks `[~]`
+> Done: silent check once on launch after the Docker gate, dismissible `UpdateBanner`, "Automatically check for updates on launch" setting (`auto_check_updates` in `settings.rs`). Remaining: daily cadence + auto-download — only meaningful once the app lives in the background (Milestone 2).
 - On startup (after the Docker readiness gate in `App.tsx`), silently check once; if an update exists show a non-blocking banner/toast.
 - Setting: "Automatically check for updates" (on/off) + cadence (on launch / daily). Persist via a settings store (see Milestone 4a).
 - Optional: "Download and install automatically, notify when ready to restart."
@@ -79,7 +84,7 @@ Goal: replace the bare "run this `brew` command" fallback (currently in `DockerS
 
 Current behavior to replace: `App.tsx` → `checkAndStartDocker` resolves to `not-installed` when no engine is running and Colima isn't installed; `DockerStatus` then surfaces a copy-paste `brew install colima` command. The wizard supersedes that screen.
 
-### 5a. Engine selection step `[ ]`
+### 5a. Engine selection step `[x]`
 - New onboarding UI (a multi-step wizard rendered by `DockerStatus`, or a dedicated `EngineWizard` component gated on the `not-installed` state).
 - Step 1: choose an engine.
   - **Colima** — recommended/default. Opentainer can install and manage it directly (we already drive Colima via `docker_lifecycle.rs`).
@@ -99,17 +104,17 @@ Current behavior to replace: `App.tsx` → `checkAndStartDocker` resolves to `no
 - Make the binaries executable at runtime if extraction/copy doesn't preserve the mode; strip `com.apple.quarantine` defensively (bundled, notarized files shouldn't carry it).
 - No `install_colima` download command is needed for the binaries anymore — selecting Colima in 5a just enables the bundled engine; the only first-run wait is the VM image (5c).
 
-### 5b. Resource configuration step `[ ]`
+### 5b. Resource configuration step `[x]`
 - After Colima is selected, let the user set VM resources before first start, with **recommended defaults that mirror Docker Desktop** (e.g. CPUs, ~6 GB memory, disk size). Show recommended values pre-filled; advanced users can override.
 - Pass these to Colima start as flags (`colima start --cpu N --memory G --disk G`). Today `start_docker` / the Colima start path uses defaults — extend it to accept a resource profile (and persist it via the settings store from **4a** so subsequent starts reuse it).
 - Keep a single source of truth for default values so the UI and the start command agree.
 
-### 5c. First-run image/VM download messaging `[ ]`
+### 5c. First-run image/VM download messaging `[x]`
 - With the engine binaries now bundled (5a), the **VM image is the only thing fetched at runtime** — downloaded once on the first Colima start when the user opts into Colima. This is slow. Surface a clear **"This is a one-time setup, it may take a few minutes"** message, with the existing `colima-output` progress (percent/speed/ETA already parsed in `App.tsx`'s `ColimaProgressEvent`).
 - Distinguish first-run (downloading image) from normal starts in the UI copy so users aren't alarmed by the wait.
 - On completion, fall through to the normal `waitForDocker` → `ready` path.
 
-### 5d. Re-entry & failure handling `[ ]`
+### 5d. Re-entry & failure handling `[x]`
 - If install/start fails (no Homebrew, no network, insufficient disk), show actionable errors with a retry, not a dead end.
 - Make the wizard re-runnable from `Settings.tsx` (e.g. "Reconfigure engine") so users can change engine or bump resources later.
 
@@ -118,7 +123,8 @@ Current behavior to replace: `App.tsx` → `checkAndStartDocker` resolves to `no
 
 ## Milestone 4 — Developer Experience (inspired by Docker Desktop / OrbStack / Podman Desktop)
 
-### 4a. Persistent settings store `[ ]`
+### 4a. Persistent settings store `[~]`
+> Done: Rust-owned JSON settings file (`src-tauri/src/settings.rs`) holding engine choice, Colima resources and update prefs. Remaining: move theme out of `ThemeContext.tsx`/localStorage into it; add tray/autostart/notification prefs as those features land.
 - Foundation for nearly everything above. Add `tauri-plugin-store` (or a small JSON config in the app config dir) to persist: theme, auto-update prefs, autostart, close-to-tray, notifications.
 - Today theme lives only in `ThemeContext.tsx`; centralize prefs.
 
@@ -151,9 +157,9 @@ Current behavior to replace: `App.tsx` → `checkAndStartDocker` resolves to `no
 
 ## Suggested implementation order
 
-1. **4a** settings store (unblocks update prefs, tray prefs, and the wizard's resource profile in 5b).
-2. **Milestone 5** engine install wizard (first impression for any user without an engine — removes the only remaining required CLI step).
-3. **Milestone 1** auto-update (highest user value, infra mostly exists).
+1. ~~**4a** settings store~~ (core done in v0.1.0; theme migration pending).
+2. ~~**Milestone 5** engine install wizard~~ (shipped in v0.1.0).
+3. **Milestone 1** auto-update — **in progress** (1b done; 1a needs signing key + secrets; 1c on-launch done).
 4. **Milestone 2** tray + background (the headline "like Docker Desktop" feature).
 5. **3** notifications.
 6. **4b/4c** container creation + image search (close the biggest functional gaps).

@@ -139,10 +139,17 @@ jobs:
           done
         shell: bash
 
+      # Updater artifacts (.app.tar.gz / AppImage / installer + .sig) and the
+      # merged latest.json are only produced here, signed with the updater key,
+      # so local `tauri build` keeps working without TAURI_SIGNING_PRIVATE_KEY.
+      # The in-app updater reads releases/latest/download/latest.json, so
+      # updates only reach users once this draft release is published.
       - name: Build and Release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ matrix.platform == 'macos-latest' && secrets.APPLE_SIGNING_IDENTITY || '' }}
           APPLE_ID: ${{ matrix.platform == 'macos-latest' && secrets.APPLE_ID || '' }}
           APPLE_PASSWORD: ${{ matrix.platform == 'macos-latest' && secrets.APPLE_PASSWORD || '' }}
@@ -171,4 +178,5 @@ jobs:
             - **Linux**: Download `.AppImage` (make executable) or `.deb` (install with dpkg)
           releaseDraft: true
           prerelease: false
-          args: ${{ matrix.args }}
+          updaterJsonPreferNsis: true
+          args: ${{ matrix.args }} --config '{"bundle":{"createUpdaterArtifacts":true}}'

@@ -26,6 +26,20 @@ export interface AppSettings {
     setup_completed: boolean;
     engine: EngineKind;
     colima: ColimaResources;
+    auto_check_updates: boolean;
+}
+
+// An available app update. Mirrors the Rust `updater::UpdateInfo` struct.
+export interface UpdateInfo {
+    current_version: string;
+    version: string;
+    notes?: string | null;
+}
+
+// Download progress while installing an update. Mirrors `updater::UpdateProgress`.
+export interface UpdateProgress {
+    downloaded: number; // bytes
+    total?: number | null; // bytes, when known
 }
 
 export interface AppApi {
@@ -62,6 +76,11 @@ export interface AppApi {
     getSettings: () => Promise<{ success: boolean; data?: AppSettings; error?: string }>;
     updateSettings: (settings: AppSettings) => Promise<{ success: boolean; error?: string }>;
     getRecommendedResources: () => Promise<{ success: boolean; data?: ColimaResources; error?: string }>;
+    // App updates
+    checkForUpdate: () => Promise<{ success: boolean; data?: UpdateInfo | null; error?: string }>;
+    // Downloads + installs the update found by the last check, then relaunches
+    // the app. Only resolves if the install fails.
+    installUpdate: (onProgress: (p: UpdateProgress) => void) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const api: AppApi = {
@@ -212,4 +231,14 @@ export const api: AppApi = {
     getSettings: async () => invoke("get_settings"),
     updateSettings: async (settings: AppSettings) => invoke("update_settings", { settings }),
     getRecommendedResources: async () => invoke("get_recommended_resources"),
+    // App updates
+    checkForUpdate: async () => invoke("check_for_update"),
+    installUpdate: async (onProgress: (p: UpdateProgress) => void) => {
+        const unlisten = await listen<UpdateProgress>("update-progress", (event) => onProgress(event.payload));
+        try {
+            return await invoke("install_update");
+        } finally {
+            unlisten();
+        }
+    },
 };

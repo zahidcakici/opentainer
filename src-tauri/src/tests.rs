@@ -91,3 +91,27 @@ fn command_response_err_sets_fields() {
     assert!(resp.data.is_none());
     assert_eq!(resp.error, Some("something broke".to_string()));
 }
+
+// ── AppSettings ───────────────────────────────────────────────────
+
+#[test]
+fn settings_default_enables_update_checks() {
+    assert!(AppSettings::default().auto_check_updates);
+}
+
+#[test]
+fn settings_from_older_file_enables_update_checks() {
+    // v0.1.0 settings files predate `auto_check_updates`.
+    let json =
+        r#"{"setup_completed":true,"engine":"colima","colima":{"cpu":4,"memory":8,"disk":60}}"#;
+    let s: AppSettings = serde_json::from_str(json).unwrap();
+    assert!(s.setup_completed);
+    assert!(s.auto_check_updates);
+}
+
+#[test]
+fn settings_respects_disabled_update_checks() {
+    let json = r#"{"setup_completed":true,"engine":"external","auto_check_updates":false}"#;
+    let s: AppSettings = serde_json::from_str(json).unwrap();
+    assert!(!s.auto_check_updates);
+}

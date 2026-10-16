@@ -8,6 +8,8 @@ import NetworkList from './components/NetworkList';
 import Settings from './components/Settings';
 import DockerStatus, { DockerState } from './components/DockerStatus';
 import EngineWizard from './components/EngineWizard';
+import UpdateBanner from './components/UpdateBanner';
+import { useUpdater } from './hooks/useUpdater';
 import { api, AppSettings, EngineKind } from './lib/api';
 
 // Increased timeout for first-run Colima (may download VM image)
@@ -32,6 +34,10 @@ const App: React.FC = () => {
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const colimaUnlisten = useRef<(() => void) | null>(null);
+  const updater = useUpdater();
+  const checkUpdater = updater.check;
+  const [updateBannerDismissed, setUpdateBannerDismissed] = useState(false);
+  const autoUpdateChecked = useRef(false);
 
   // Start (and wait for) the bundled Colima engine, streaming progress to the UI.
   const startColima = useCallback(async () => {
@@ -152,6 +158,15 @@ const App: React.FC = () => {
     };
   }, [checkAndStartDocker]);
 
+  // Once Docker is ready, silently check for an app update (once per launch).
+  useEffect(() => {
+    if (dockerState !== 'ready' || autoUpdateChecked.current) return;
+    autoUpdateChecked.current = true;
+    api.getSettings().then((res) => {
+      if (res.data?.auto_check_updates ?? true) checkUpdater({ silent: true });
+    }).catch(() => { });
+  }, [dockerState, checkUpdater]);
+
   // Engine onboarding / reconfiguration screen
   if (dockerState === 'setup') {
     return <EngineWizard onComplete={handleWizardComplete} initial={settings} />;
@@ -172,11 +187,18 @@ const App: React.FC = () => {
 
   return (
     <Layout activeTab={activeTab} setActiveTab={setActiveTab}>
+      {updater.status === 'available' && updater.info && !updateBannerDismissed && activeTab !== 'settings' && (
+        <UpdateBanner
+          version={updater.info.version}
+          onView={() => setActiveTab('settings')}
+          onDismiss={() => setUpdateBannerDismissed(true)}
+        />
+      )}
       {activeTab === 'containers' && <ContainerList />}
       {activeTab === 'images' && <ImageList />}
       {activeTab === 'volumes' && <VolumeList />}
       {activeTab === 'networks' && <NetworkList />}
-      {activeTab === 'settings' && <Settings onReconfigureEngine={handleReconfigureEngine} />}
+      {activeTab === 'settings' && <Settings onReconfigureEngine={handleReconfigureEngine} updater={updater} />}
     </Layout>
   );
 }

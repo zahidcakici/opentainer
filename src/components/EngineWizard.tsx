@@ -46,6 +46,7 @@ const EngineWizard: React.FC<EngineWizardProps> = ({ onComplete, initial }) => {
             setup_completed: true,
             engine,
             colima: resources,
+            auto_check_updates: initial?.auto_check_updates ?? true,
         });
         setSaving(false);
         if (!res.success) {

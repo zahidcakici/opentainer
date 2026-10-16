@@ -22,7 +22,7 @@ pub enum EngineKind {
     External,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
     /// Whether the engine wizard has been completed at least once.
     #[serde(default)]
@@ -33,6 +33,24 @@ pub struct AppSettings {
     /// Colima VM resource profile (only meaningful when `engine == Colima`).
     #[serde(default)]
     pub colima: ColimaResources,
+    /// Silently check for app updates once on launch.
+    #[serde(default = "default_true")]
+    pub auto_check_updates: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            setup_completed: false,
+            engine: EngineKind::default(),
+            colima: ColimaResources::default(),
+            auto_check_updates: true,
+        }
+    }
 }
 
 fn settings_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {

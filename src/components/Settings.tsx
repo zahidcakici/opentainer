@@ -1,14 +1,18 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useTheme } from '../context/ThemeContext';
-import { Moon, Sun, Monitor, Container, Box } from 'lucide-react';
+import { Moon, Sun, Monitor, Container, Box, Download, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
 import { api, AppSettings } from '../lib/api';
+import { Updater } from '../hooks/useUpdater';
 
 interface SettingsProps {
     onReconfigureEngine?: () => void;
+    updater: Updater;
 }
 
-const Settings = ({ onReconfigureEngine }: SettingsProps) => {
+const formatMB = (bytes: number) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+
+const Settings = ({ onReconfigureEngine, updater }: SettingsProps) => {
     const { theme, setTheme } = useTheme();
     const [version, setVersion] = useState<string>('');
     const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -34,6 +38,30 @@ const Settings = ({ onReconfigureEngine }: SettingsProps) => {
         padding: '16px', background: 'var(--bg-panel)', borderRadius: '8px',
         border: '1px solid var(--border-subtle)',
     };
+    const secondaryButton: React.CSSProperties = {
+        display: 'inline-flex', alignItems: 'center', gap: '6px',
+        padding: '8px 14px', fontSize: '13px', fontWeight: 500,
+        borderRadius: '6px', border: '1px solid var(--border-subtle)',
+        background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer',
+        whiteSpace: 'nowrap',
+    };
+    const primaryButton: React.CSSProperties = {
+        ...secondaryButton,
+        border: '1px solid var(--text-primary)',
+        background: 'var(--text-primary)', color: 'var(--bg-app)',
+    };
+
+    const toggleAutoCheck = async (enabled: boolean) => {
+        if (!settings) return;
+        const next = { ...settings, auto_check_updates: enabled };
+        setSettings(next);
+        const res = await api.updateSettings(next);
+        if (!res.success) setSettings(settings);
+    };
+
+    const { status, info, progress, error: updateError } = updater;
+    const busy = status === 'checking' || status === 'installing';
+    const percent = progress?.total ? Math.min(100, Math.round((progress.downloaded / progress.total) * 100)) : null;
 
     return (
         <motion.div
@@ -121,6 +149,88 @@ const Settings = ({ onReconfigureEngine }: SettingsProps) => {
                         </>
                     ) : (
                         <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>Loading…</p>
+                    )}
+                </div>
+            </div>
+
+            {/* Updates Section */}
+            <div style={{ marginBottom: '40px' }}>
+                <h2 style={sectionHeading}>Updates</h2>
+                <div style={panel}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                            {status === 'available' || status === 'installing'
+                                ? <Download size={20} color="var(--status-running)" />
+                                : status === 'error'
+                                    ? <AlertCircle size={20} color="var(--status-error)" />
+                                    : status === 'up-to-date'
+                                        ? <CheckCircle2 size={20} color="var(--status-running)" />
+                                        : <RefreshCw size={20} color="var(--text-secondary)" />}
+                            <div style={{ minWidth: 0 }}>
+                                <div style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: 500 }}>
+                                    {status === 'checking' && 'Checking for updates…'}
+                                    {status === 'up-to-date' && 'Opentainer is up to date'}
+                                    {status === 'available' && `Version ${info?.version} is available`}
+                                    {status === 'installing' && (percent === null ? 'Downloading update…' : `Downloading update… ${percent}%`)}
+                                    {status === 'error' && 'Update failed'}
+                                    {status === 'idle' && 'Check for a newer version'}
+                                </div>
+                                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px', fontFamily: 'var(--font-mono)', overflowWrap: 'anywhere' }}>
+                                    {status === 'error'
+                                        ? updateError
+                                        : status === 'installing' && progress
+                                            ? `${formatMB(progress.downloaded)}${progress.total ? ` / ${formatMB(progress.total)}` : ''}`
+                                            : `Current version ${version || '…'}`}
+                                </div>
+                            </div>
+                        </div>
+                        {status === 'available' ? (
+                            <button style={primaryButton} onClick={() => updater.install()}>
+                                <Download size={14} /> Install &amp; Restart
+                            </button>
+                        ) : (
+                            <button
+                                style={{ ...secondaryButton, opacity: busy ? 0.5 : 1, cursor: busy ? 'default' : 'pointer' }}
+                                disabled={busy}
+                                onClick={() => updater.check()}
+                            >
+                                <RefreshCw size={14} /> {status === 'error' ? 'Try again' : 'Check for updates'}
+                            </button>
+                        )}
+                    </div>
+
+                    {status === 'installing' && (
+                        <div style={{ marginTop: '12px', height: '4px', borderRadius: '2px', background: 'var(--border-subtle)', overflow: 'hidden' }}>
+                            <div style={{
+                                height: '100%', width: `${percent ?? 100}%`, background: 'var(--status-running)',
+                                opacity: percent === null ? 0.5 : 1, transition: 'width 0.2s ease',
+                            }} />
+                        </div>
+                    )}
+
+                    {status === 'available' && info?.notes && (
+                        <pre style={{
+                            marginTop: '12px', marginBottom: 0, padding: '10px 12px', maxHeight: '160px', overflow: 'auto',
+                            fontSize: '12px', lineHeight: 1.5, whiteSpace: 'pre-wrap', color: 'var(--text-secondary)',
+                            background: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-subtle)',
+                            fontFamily: 'inherit',
+                        }}>
+                            {info.notes}
+                        </pre>
+                    )}
+
+                    {settings && (
+                        <label style={{
+                            display: 'flex', alignItems: 'center', gap: '8px', marginTop: '14px', paddingTop: '12px',
+                            borderTop: '1px solid var(--border-subtle)', fontSize: '13px', color: 'var(--text-secondary)', cursor: 'pointer',
+                        }}>
+                            <input
+                                type="checkbox"
+                                checked={settings.auto_check_updates}
+                                onChange={(e) => toggleAutoCheck(e.target.checked)}
+                            />
+                            Automatically check for updates on launch
+                        </label>
                     )}
                 </div>
             </div>

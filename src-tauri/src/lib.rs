@@ -1,5 +1,6 @@
 mod docker_lifecycle;
 mod settings;
+mod updater;
 
 use settings::AppSettings;
 
@@ -849,6 +850,28 @@ fn update_settings(app_handle: tauri::AppHandle, settings: AppSettings) -> Comma
 }
 
 #[tauri::command]
+async fn check_for_update(
+    app_handle: tauri::AppHandle,
+    pending: State<'_, updater::PendingUpdate>,
+) -> Result<CommandResponse<Option<updater::UpdateInfo>>, String> {
+    match updater::check(&app_handle, &pending).await {
+        Ok(info) => Ok(CommandResponse::ok(info)),
+        Err(e) => Ok(CommandResponse::err(e)),
+    }
+}
+
+#[tauri::command]
+async fn install_update(
+    app_handle: tauri::AppHandle,
+    pending: State<'_, updater::PendingUpdate>,
+) -> Result<CommandResponse<()>, String> {
+    match updater::install(&app_handle, &pending).await {
+        Ok(_) => Ok(CommandResponse::ok_empty()),
+        Err(e) => Ok(CommandResponse::err(e)),
+    }
+}
+
+#[tauri::command]
 fn get_recommended_resources() -> CommandResponse<docker_lifecycle::ColimaResources> {
     CommandResponse::ok(docker_lifecycle::recommended_resources())
 }
@@ -880,7 +903,9 @@ pub fn run() {
         .manage(LogState(Mutex::new(HashMap::new())))
         .manage(ExecState(Mutex::new(HashMap::new())))
         .manage(PullState(Mutex::new(HashMap::new())))
+        .manage(updater::PendingUpdate::default())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             // Resolve the bundled Colima/Lima engine before anything tries to
             // start Docker, so all engine commands route to it.
@@ -977,7 +1002,9 @@ pub fn run() {
             did_we_start_docker,
             get_settings,
             update_settings,
-            get_recommended_resources
+            get_recommended_resources,
+            check_for_update,
+            install_update
         ])
         .on_window_event(|window, event| {
             // Handle window close request (red X button OR custom Cmd+Q) - stop Docker if we started it
