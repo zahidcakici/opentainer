@@ -24,9 +24,6 @@ export default defineConfig({
     // to make use of `TAURI_DEBUG` and other env variables
     envPrefix: ["VITE_", "TAURI_"],
     clearScreen: false,
-    build: {
-        minify: 'esbuild',
-    },
     // @ts-ignore
     test: {
         globals: true,

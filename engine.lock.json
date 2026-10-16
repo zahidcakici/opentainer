@@ -16,15 +16,15 @@
       }
     },
     "lima": {
-      "version": "2.1.3",
+      "version": "2.2.1",
       "artifacts": {
         "arm64": {
-          "url": "https://github.com/lima-vm/lima/releases/download/v2.1.3/lima-2.1.3-Darwin-arm64.tar.gz",
-          "sha256": "52bcf0780fcb28128ac9f6924d4410a6bc7c92fa80c9a858d89ae34ec3ce4f35"
+          "url": "https://github.com/lima-vm/lima/releases/download/v2.2.1/lima-2.2.1-Darwin-arm64.tar.gz",
+          "sha256": "9e9eacce88f37e185c346bad73aa6136f738d8cdf8c3bb23cd42b071824bc66e"
         },
         "x86_64": {
-          "url": "https://github.com/lima-vm/lima/releases/download/v2.1.3/lima-2.1.3-Darwin-x86_64.tar.gz",
-          "sha256": "817cef8b764ec29724046993ece687556463c76a45c55fe1562458e49bd7e2ec"
+          "url": "https://github.com/lima-vm/lima/releases/download/v2.2.1/lima-2.2.1-Darwin-x86_64.tar.gz",
+          "sha256": "6b776e4bc41f358e6ee01fefcc78e2eb26f11635a0fcff632234af77a566c6c4"
         }
       }
     }
