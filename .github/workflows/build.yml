@@ -16,8 +16,10 @@ jobs:
         include:
           - platform: macos-latest
             args: '--target aarch64-apple-darwin'
+            engine_arch: arm64
           - platform: macos-latest
             args: '--target x86_64-apple-darwin'
+            engine_arch: x86_64
           - platform: ubuntu-22.04
             args: ''
           - platform: windows-latest
@@ -47,6 +49,19 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm ci
+
+      # The macOS bundle ships the Colima + Lima engine via bundle.resources
+      # (tauri.macos.conf.json), so the build fails without it. Same steps as
+      # release.yml, minus Developer ID signing (fetch-engine ad-hoc signs).
+      - name: Check engine lock is in sync (macOS)
+        if: matrix.platform == 'macos-latest'
+        run: bash scripts/lock-engine.sh --check
+        shell: bash
+
+      - name: Fetch container engine (macOS)
+        if: matrix.platform == 'macos-latest'
+        run: bash scripts/fetch-engine.sh ${{ matrix.engine_arch }}
+        shell: bash
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@8dc56df183cc5aa67c880b1931659f6bc9af997a
