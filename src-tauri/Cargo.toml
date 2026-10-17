@@ -25,7 +25,11 @@ tauri = { version = "2.12.4", features = [] }
 tauri-plugin-log = "2"
 bollard = "0.21.1"
 tauri-plugin-opener = "2.7.2"
-tauri-plugin-updater = "2.14.0"
+# `zip` is off: it only unpacks zipped Windows installers / gzipped AppImages,
+# and we ship raw .exe/.msi/.AppImage update bundles. macOS .app.tar.gz
+# extraction doesn't depend on it. Also drops the vulnerable zip 4.x
+# (RUSTSEC-2026-0367/0368/0369) until the plugin moves to zip >= 9.
+tauri-plugin-updater = { version = "2.14.0", default-features = false, features = ["rustls-tls", "system-proxy"] }
 
 # Optimize for fast rebuilds during development
 [profile.dev]
