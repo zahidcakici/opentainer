@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Image, ApiResult } from '../types';
 import { api } from '../lib/api';
+import { getCached, hasCached, setCached } from '../lib/resourceCache';
+
+const CACHE_KEY = 'images';
 
 interface UseImagesReturn {
     images: Image[];
@@ -11,14 +14,15 @@ interface UseImagesReturn {
 }
 
 export function useImages(): UseImagesReturn {
-    const [images, setImages] = useState<Image[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [images, setImages] = useState<Image[]>(() => getCached<Image[]>(CACHE_KEY) ?? []);
+    const [loading, setLoading] = useState(() => !hasCached(CACHE_KEY));
     const [error, setError] = useState<string | null>(null);
 
     const fetchImages = useCallback(async () => {
         try {
             const result: ApiResult<Image[]> = await api.listImages();
             if (result.success && result.data) {
+                setCached(CACHE_KEY, result.data);
                 setImages(result.data);
             } else {
                 setError(result.error || 'Unknown error');

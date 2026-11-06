@@ -78,7 +78,7 @@ const ContainerList: React.FC = () => {
     // ... rest of the logic ...
 
     // Default sort by statusRank (Running top)
-    const { items: sortedContainers, requestSort, sortConfig } = useSortable(tableData, { key: 'statusRank', direction: 'ascending' });
+    const { items: sortedContainers, requestSort, sortConfig } = useSortable(tableData, { key: 'statusRank', direction: 'ascending' }, 'containers');
 
     // Grouping Logic
     const groupedItems = useMemo(() => {

@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Network, ApiResult } from '../types';
 import { api } from '../lib/api';
+import { getCached, hasCached, setCached } from '../lib/resourceCache';
+
+const CACHE_KEY = 'networks';
 
 interface UseNetworksReturn {
     networks: Network[];
@@ -10,15 +13,19 @@ interface UseNetworksReturn {
 }
 
 export function useNetworks(): UseNetworksReturn {
-    const [networks, setNetworks] = useState<Network[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [networks, setNetworks] = useState<Network[]>(() => getCached<Network[]>(CACHE_KEY) ?? []);
+    const [loading, setLoading] = useState(() => !hasCached(CACHE_KEY));
     const [error, setError] = useState<string | null>(null);
 
     const fetchNetworks = useCallback(async () => {
         try {
             const result: ApiResult<Network[]> = await api.listNetworks();
             if (result.success && result.data) {
-                setNetworks(result.data);
+                // Docker lists these in no fixed order; sort so rows don't shuffle
+                // between fetches (and act as the tiebreak for column sorts).
+                const sorted = [...result.data].sort((a, b) => a.Name.localeCompare(b.Name));
+                setCached(CACHE_KEY, sorted);
+                setNetworks(sorted);
             } else {
                 setError(result.error || 'Unknown error');
             }

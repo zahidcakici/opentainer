@@ -125,7 +125,7 @@ const ImageList: React.FC = () => {
         });
     }, [filteredImages, containers]);
 
-    const { items: sortedImages, requestSort, sortConfig } = useSortable(tableData, { key: 'usageRank', direction: 'ascending' });
+    const { items: sortedImages, requestSort, sortConfig } = useSortable(tableData, { key: 'usageRank', direction: 'ascending' }, 'images');
 
     const handlePull = useCallback((e: React.FormEvent) => {
         e.preventDefault();

@@ -1,6 +1,7 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import { useSortable } from '../useSortable';
+import { clearCache } from '../../lib/resourceCache';
 
 describe('useSortable', () => {
     const items = [
@@ -41,5 +42,17 @@ describe('useSortable', () => {
         const { result } = renderHook(() => useSortable(items, { key: 'value', direction: 'descending' }));
         expect(result.current.items[0].value).toBe(3);
         expect(result.current.items[2].value).toBe(1);
+    });
+
+    it('remembers the chosen sort across remounts when given a cache key', () => {
+        clearCache();
+        const first = renderHook(() => useSortable(items, undefined, 'test'));
+        act(() => first.result.current.requestSort('value'));
+        act(() => first.result.current.requestSort('value'));
+        first.unmount();
+
+        const { result } = renderHook(() => useSortable(items, undefined, 'test'));
+        expect(result.current.sortConfig).toEqual({ key: 'value', direction: 'descending' });
+        expect(result.current.items[0].value).toBe(3);
     });
 });

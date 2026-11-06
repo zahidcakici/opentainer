@@ -11,6 +11,7 @@ import EngineWizard from './components/EngineWizard';
 import UpdateBanner from './components/UpdateBanner';
 import { useUpdater } from './hooks/useUpdater';
 import { api, AppSettings, EngineKind } from './lib/api';
+import { clearCache } from './lib/resourceCache';
 
 // Increased timeout for first-run Colima (may download VM image)
 const DOCKER_TIMEOUT_SECONDS = 300;
@@ -82,6 +83,8 @@ const App: React.FC = () => {
   }, []);
 
   const checkAndStartDocker = useCallback(async () => {
+    // The engine may change between (re)starts; don't show another daemon's data.
+    clearCache();
     setDockerState('checking');
     setErrorMessage(undefined);
 
@@ -131,6 +134,7 @@ const App: React.FC = () => {
 
   // Re-open the wizard from Settings (prefilled with current values).
   const handleReconfigureEngine = useCallback(async () => {
+    clearCache();
     const s = await api.getSettings();
     setSettings(s.data ?? null);
     setDockerState('setup');

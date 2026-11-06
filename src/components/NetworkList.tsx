@@ -40,7 +40,7 @@ const NetworkList: React.FC = () => {
         }));
     }, [filteredNetworks]);
 
-    const { items: sortedNetworks, requestSort, sortConfig } = useSortable(tableData);
+    const { items: sortedNetworks, requestSort, sortConfig } = useSortable(tableData, undefined, 'networks');
 
     // Header Helper
     const HeaderCell: React.FC<{ label: string; sortKey?: string; style?: React.CSSProperties }> = ({ label, sortKey, style }) => (

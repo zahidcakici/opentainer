@@ -144,7 +144,7 @@ const VolumeList: React.FC = () => {
         });
     }, [filteredVolumes, containers]);
 
-    const { items: sortedVolumes, requestSort, sortConfig } = useSortable(tableData, { key: 'usageRank', direction: 'ascending' });
+    const { items: sortedVolumes, requestSort, sortConfig } = useSortable(tableData, { key: 'usageRank', direction: 'ascending' }, 'volumes');
 
     const HeaderCell: React.FC<{ label: string; sortKey?: string; style?: React.CSSProperties }> = ({ label, sortKey, style }) => (
         <div

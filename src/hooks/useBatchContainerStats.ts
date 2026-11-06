@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import byteSize from 'byte-size';
 import { api } from '../lib/api';
+import { getCached, setCached } from '../lib/resourceCache';
+
+const CACHE_KEY = 'container-stats';
 
 export interface ContainerStats {
     cpu: string;
@@ -24,10 +27,13 @@ interface StatsResponse {
 }
 
 export function useBatchContainerStats(containerIds: string[]): Record<string, ContainerStats> {
-    const [allStats, setAllStats] = useState<Record<string, ContainerStats>>({});
+    const [allStats, setAllStats] = useState<Record<string, ContainerStats>>(
+        () => getCached<Record<string, ContainerStats>>(CACHE_KEY) ?? {}
+    );
 
     useEffect(() => {
         if (!containerIds.length) {
+            setCached(CACHE_KEY, {});
             setAllStats({});
             return;
         }
@@ -58,6 +64,7 @@ export function useBatchContainerStats(containerIds: string[]): Record<string, C
                     statsMap[res.id] = { cpu: '0%', mem: '0 B' };
                 }
             });
+            setCached(CACHE_KEY, statsMap);
             setAllStats(statsMap);
         };
 

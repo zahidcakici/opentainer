@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { getCached, setCached } from '../lib/resourceCache';
 
 interface SortConfig {
     key: string | null;
@@ -13,9 +14,13 @@ interface UseSortableReturn<T> {
 
 export function useSortable<T extends Record<string, any>>(
     items: T[],
-    config: SortConfig = { key: null, direction: 'ascending' }
+    config: SortConfig = { key: null, direction: 'ascending' },
+    /** When set, the chosen sort is remembered across remounts (tab switches). */
+    cacheKey?: string
 ): UseSortableReturn<T> {
-    const [sortConfig, setSortConfig] = useState<SortConfig>(config);
+    const [sortConfig, setSortConfig] = useState<SortConfig>(
+        () => (cacheKey && getCached<SortConfig>(`sort:${cacheKey}`)) || config
+    );
 
     const sortedItems = useMemo(() => {
         const sortableItems = [...items];
@@ -49,7 +54,9 @@ export function useSortable<T extends Record<string, any>>(
         if (sortConfig.key === key && sortConfig.direction === 'ascending') {
             direction = 'descending';
         }
-        setSortConfig({ key, direction });
+        const next: SortConfig = { key, direction };
+        if (cacheKey) setCached(`sort:${cacheKey}`, next);
+        setSortConfig(next);
     };
 
     return { items: sortedItems, requestSort, sortConfig };

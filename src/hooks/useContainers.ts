@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Container, ApiResult } from '../types';
 import { api } from '../lib/api';
+import { getCached, hasCached, setCached } from '../lib/resourceCache';
+
+const CACHE_KEY = 'containers';
 
 interface UseContainersReturn {
     containers: Container[];
@@ -10,14 +13,15 @@ interface UseContainersReturn {
 }
 
 export function useContainers(): UseContainersReturn {
-    const [containers, setContainers] = useState<Container[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [containers, setContainers] = useState<Container[]>(() => getCached<Container[]>(CACHE_KEY) ?? []);
+    const [loading, setLoading] = useState(() => !hasCached(CACHE_KEY));
     const [error, setError] = useState<string | null>(null);
 
     const fetchContainers = useCallback(async () => {
         try {
             const result: ApiResult<Container[]> = await api.listContainers();
             if (result.success && result.data) {
+                setCached(CACHE_KEY, result.data);
                 setContainers(result.data);
             } else {
                 setError(result.error || 'Unknown error');
