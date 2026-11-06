@@ -943,7 +943,24 @@ pub fn run() {
                     ])
                     .build()?;
 
-                let menu = MenuBuilder::new(app).item(&app_submenu).build()?;
+                // macOS routes Cmd+C/V/X/A/Z through the menu bar; without an Edit
+                // menu they never reach the webview (no copying from logs/terminal,
+                // no pasting into inputs).
+                let edit_submenu = SubmenuBuilder::new(app, "Edit")
+                    .items(&[
+                        &PredefinedMenuItem::undo(app, None)?,
+                        &PredefinedMenuItem::redo(app, None)?,
+                        &PredefinedMenuItem::separator(app)?,
+                        &PredefinedMenuItem::cut(app, None)?,
+                        &PredefinedMenuItem::copy(app, None)?,
+                        &PredefinedMenuItem::paste(app, None)?,
+                        &PredefinedMenuItem::select_all(app, None)?,
+                    ])
+                    .build()?;
+
+                let menu = MenuBuilder::new(app)
+                    .items(&[&app_submenu, &edit_submenu])
+                    .build()?;
 
                 app.set_menu(menu)?;
 
