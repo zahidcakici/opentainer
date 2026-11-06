@@ -6,8 +6,64 @@ on:
       - 'v*.*.*'
 
 jobs:
+  # One draft release for all platforms. Letting each matrix job create it
+  # races: parallel jobs can each create a draft for the same tag and split
+  # the bundles between them (happened on v0.2.1).
+  create-release:
+    name: Create draft release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.release.outputs.id }}
+    steps:
+      - name: Create (or reuse) draft release
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          TAG="app-v$VERSION"
+          # Reuse an existing draft when jobs are re-run.
+          ID="$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
+            -q ".[] | select(.draft and .tag_name == \"$TAG\") | .id" | head -n1)"
+          if [[ -z "$ID" ]]; then
+            cat > "$RUNNER_TEMP/release-body.md" <<'BODY'
+          ## What's New
+
+          See the assets to download this version and install.
+
+          ## Downloads
+
+          | Platform | File |
+          |----------|------|
+          | macOS (Apple Silicon) | `opentainer_*_aarch64.dmg` |
+          | macOS (Intel) | `opentainer_*_x64.dmg` |
+          | Windows | `opentainer_*_x64-setup.exe` or `.msi` |
+          | Linux | `opentainer_*_amd64.AppImage` or `.deb` |
+
+          ## Installation
+
+          - **macOS**: Download the `.dmg`, open it, and drag Opentainer to Applications
+          - **Windows**: Download and run the `.exe` or `.msi` installer
+          - **Linux**: Download `.AppImage` (make executable) or `.deb` (install with dpkg)
+          BODY
+            ID="$(gh api -X POST "repos/$GITHUB_REPOSITORY/releases" \
+              -f tag_name="$TAG" \
+              -f target_commitish="$GITHUB_SHA" \
+              -f name="Opentainer v$VERSION" \
+              -F draft=true \
+              -F prerelease=false \
+              -F body=@"$RUNNER_TEMP/release-body.md" \
+              -q .id)"
+          fi
+          echo "release $TAG -> $ID"
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+        shell: bash
+
   publish-tauri:
     name: Release (${{ matrix.platform }})
+    needs: create-release
     permissions:
       contents: write
     strategy:
@@ -155,29 +211,7 @@ jobs:
           APPLE_PASSWORD: ${{ matrix.platform == 'macos-latest' && secrets.APPLE_PASSWORD || '' }}
           APPLE_TEAM_ID: ${{ matrix.platform == 'macos-latest' && secrets.APPLE_TEAM_ID || '' }}
         with:
-          tagName: app-v__VERSION__
-          releaseName: 'Opentainer v__VERSION__'
-          releaseBody: |
-            ## What's New
-            
-            See the assets to download this version and install.
-            
-            ## Downloads
-            
-            | Platform | File |
-            |----------|------|
-            | macOS (Apple Silicon) | `opentainer_*_aarch64.dmg` |
-            | macOS (Intel) | `opentainer_*_x64.dmg` |
-            | Windows | `opentainer_*_x64-setup.exe` or `.msi` |
-            | Linux | `opentainer_*_amd64.AppImage` or `.deb` |
-            
-            ## Installation
-            
-            - **macOS**: Download the `.dmg`, open it, and drag Opentainer to Applications
-            - **Windows**: Download and run the `.exe` or `.msi` installer
-            - **Linux**: Download `.AppImage` (make executable) or `.deb` (install with dpkg)
-          releaseDraft: true
-          prerelease: false
+          releaseId: ${{ needs.create-release.outputs.release_id }}
           includeUpdaterJson: false
           args: ${{ matrix.args }} --config '{"bundle":{"createUpdaterArtifacts":true}}'
 
